@@ -5,8 +5,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-# Removed arff import: from scipy.io import arff
 
+# Removed arff import: from scipy.io import arff
 
 # Load the model
 try:
@@ -31,7 +31,6 @@ try:
 except FileNotFoundError:
     st.error("Error: 'ObesityDataSet.csv' not found. Please ensure the data file is available.")
     df = None
-
 
 # Create preprocessing pipelines for numerical and categorical features
 # This needs to be fitted on the training data
