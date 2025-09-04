@@ -269,14 +269,14 @@ if loaded_models is not None and df is not None:
                 # Create a pandas Series for easy plotting
                 risk_distribution = pd.Series(probabilities, index=class_labels)
 
-                # Filter for the desired classes
-                target_classes = ['Insufficient_Weight', 'Normal_Weight', 'Obesity_Type_I', 'Obesity_Type_II', 'Obesity_Type_III']
-                risk_distribution_filtered = risk_distribution[risk_distribution.index.isin(target_classes)]
+                # # Filter for the desired classes - Removed this line to include all classes
+                # target_classes = ['Insufficient_Weight', 'Normal_Weight', 'Obesity_Type_I', 'Obesity_Type_II', 'Obesity_Type_III']
+                # risk_distribution_filtered = risk_distribution[risk_distribution.index.isin(target_classes)]
 
                 # Plot the pie chart
                 fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
-                risk_distribution_filtered.plot.pie(autopct='%1.1f%%', startangle=90, ax=ax_pie)
-                ax_pie.set_title('Risk Distribution for Key Obesity Levels')
+                risk_distribution.plot.pie(autopct='%1.1f%%', startangle=90, ax=ax_pie)
+                ax_pie.set_title('Risk Distribution for Obesity Levels')
                 ax_pie.set_ylabel('') # Remove the default y-label
                 st.pyplot(fig_pie)
                 plt.close(fig_pie)
