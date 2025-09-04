@@ -76,15 +76,15 @@ if loaded_models is not None and df is not None:
             options = list(df[col].unique())
             input_data[col] = st.selectbox(f"{col}:", options)
         elif col in numerical_cols_for_preprocessor:
-            # Add help text with example values and units
+            # Add units to the description
             if col == 'Weight':
-                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter weight in kg (e.g., 60)")
+                 input_data[col] = st.number_input(f"{col} (kg):", value=0.0, help="Enter weight in kilograms") # Updated label and help
             elif col == 'Height':
-                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter height in meters (e.g., 1.75)")
+                 input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
             elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter age in years (e.g., 30)")
+                 input_data[col] = st.number_input(f"{col} (years):", value=0.0, help="Enter age in years") # Updated label and help
             elif col == 'FCVC':
-                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter frequency of consumption of vegetables (e.g., 2.0)")
+                 input_data[col] = st.number_input("Frequency of consumption of vegetables (per day):", value=0.0, help="Enter frequency of consumption of vegetables (e.g., 2.0)") # Changed label for FCVC
             else:
                 input_data[col] = st.number_input(f"{col}:", value=0.0)
 
