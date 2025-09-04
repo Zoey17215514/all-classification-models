@@ -88,7 +88,7 @@ if loaded_models is not None and df is not None:
             elif col == 'Height':
                  input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
             elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col} (years):", value=0.0, help="Enter age in years") # Updated label and help
+                 input_data[col] = st.number_input(f"{col} (years):", value=0, help="Enter age in years") # Updated label and help
             else:
                 input_data[col] = st.number_input(f"{col}:", value=0.0)
 
