@@ -120,21 +120,6 @@ if loaded_models is not None and df is not None:
             elif 'Insufficient_Weight' in prediction[0]:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
 
-            # --- Add Visualizations and Comparison ---
-            st.header("4. Model Performance and Insights")
-
-            # Assuming you have a DataFrame or dictionary with model performance metrics
-            # In a real scenario, you'd load or calculate these metrics.
-            model_performance_data = {
-                'Model': ['Decision Tree', 'Random Forest', 'Support Vector Machine'],
-                'Accuracy': [0.9456, 0.9504, 0.9598],
-                'Precision': [0.9476, 0.9524, 0.9586],
-                'Recall': [0.9440, 0.9485, 0.9586],
-                'F1 Score': [0.9450, 0.9495, 0.9583]
-            }
-            model_performance_df = pd.DataFrame(model_performance_data)
-
-            st.subheader("4.1 Model Performance Comparison")
 
             # Accuracy Over Models Line Chart
             fig1, ax1 = plt.subplots(figsize=(10, 6))
@@ -155,9 +140,6 @@ if loaded_models is not None and df is not None:
             ax2.legend(title='Metric')
             st.pyplot(fig2)
             plt.close(fig2)
-
-            # Display a table of performance metrics
-            st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
             # Feature Importance (Horizontal Bar Chart)
             if hasattr(model, 'feature_importances_'):
