@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.svm import SVC # Import SVC
 
 # Load the model
 try:
@@ -64,6 +65,13 @@ if df is not None:
     if loaded_models:
         for name, model in loaded_models.items():
             try:
+                # For SVC, ensure probability=True is set if not already
+                if isinstance(model, SVC) and not hasattr(model, 'predict_proba'):
+                     model.probability = True
+                     # Refit the model to enable probabilities (this might take time)
+                     model.fit(preprocessor_deploy.transform(df[deployment_features]), df['NObeyesdad'])
+
+
                 y_pred_full = model.predict(X_processed_full)
                 accuracy = accuracy_score(y_full, y_pred_full)
                 precision = precision_score(y_full, y_pred_full, average='macro', zero_division=0)
