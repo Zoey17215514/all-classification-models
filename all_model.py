@@ -116,6 +116,113 @@ if loaded_models is not None and df is not None:
     models_to_choose = list(loaded_models.keys())
     selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
 
+    # --- Add Visualizations and Comparison ---
+    st.header("3. Model Performance and Insights")
+
+    if not model_performance_df.empty:
+        st.subheader("3.1 Model Performance Comparison")
+
+        # Display a table of performance metrics
+        st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
+
+        # Accuracy Over Models Line Chart
+        model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
+        fig1, ax1 = plt.subplots(figsize=(10, 6))
+        sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+        ax1.set_title('Model Performance Comparison Across Metrics (Line Plot)')
+        ax1.set_ylabel('Score')
+        ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+        ax1.legend(title='Metric')
+        st.pyplot(fig1)
+        plt.close(fig1)
+
+        # Comparison of Metrics (Grouped Bar Chart)
+        model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
+        fig2, ax2 = plt.subplots(figsize=(12, 7))
+        sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
+        ax2.set_title('Comparison of Performance Metrics Across Models (Bar Plot)')
+        ax2.set_ylabel('Score')
+        ax2.legend(title='Metric')
+        st.pyplot(fig2)
+        plt.close(fig2)
+
+
+    # Feature Importance (Horizontal Bar Chart)
+    if hasattr(model, 'feature_importances_'):
+        st.subheader(f"3.2 Feature Importance ({selected_model_name})")
+        # Get feature names after preprocessing
+        try:
+            feature_names = []
+            for name, transformer, cols in preprocessor_deploy.transformers_:
+                if hasattr(transformer, 'get_feature_names_out'):
+                     if isinstance(cols, str): # Handle single column case
+                         feature_names.extend(transformer.get_feature_names_out([cols]))
+                     else: # Handle multiple columns
+                         feature_names.extend(transformer.get_feature_names_out(cols))
+                elif name == 'num': # For numerical columns, the names are the original column names
+                     feature_names.extend(cols)
+
+            if preprocessor_deploy.remainder == 'passthrough':
+                 all_input_cols = list(X_train_deploy.columns)
+                 processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
+                 remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                 feature_names.extend(remaining_cols)
+
+            importances = model.feature_importances_
+            if len(importances) == len(feature_names):
+                feat_importances = pd.Series(importances, index=feature_names)
+                feat_importances = feat_importances.sort_values(ascending=False)
+
+                fig4, ax4 = plt.subplots(figsize=(10, 7))
+                feat_importances.plot(kind='barh', ax=ax4)
+                ax4.set_title(f'Feature Importances ({selected_model_name})')
+                ax4.set_xlabel('Importance')
+                ax4.invert_yaxis()
+                st.pyplot(fig4)
+                plt.close(fig4)
+            else:
+                 st.warning("Could not match feature importances to feature names. Number of importances and feature names do not match.")
+
+        except Exception as e:
+            st.error(f"An error occurred while generating Feature Importance chart: {e}")
+
+    elif hasattr(model, 'coef_'):
+         st.subheader(f"3.2 Feature Coefficients ({selected_model_name})")
+         try:
+            feature_names = []
+            for name, transformer, cols in preprocessor_deploy.transformers_:
+                if hasattr(transformer, 'get_feature_names_out'):
+                     if isinstance(cols, str):
+                         feature_names.extend(transformer.get_feature_names_out([cols]))
+                     else:
+                         feature_names.extend(transformer.get_feature_names_out(cols))
+                elif name == 'num':
+                     feature_names.extend(cols)
+
+            if preprocessor_deploy.remainder == 'passthrough':
+                 all_input_cols = list(X_train_deploy.columns)
+                 processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
+                 remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                 feature_names.extend(remaining_cols)
+
+            coef_values = np.abs(model.coef_).mean(axis=0)
+
+            if len(coef_values) == len(feature_names):
+                 feat_coef = pd.Series(coef_values, index=feature_names)
+                 feat_coef = feat_coef.sort_values(ascending=False)
+
+                 fig_coef, ax_coef = plt.subplots(figsize=(10, 7))
+                 feat_coef.plot(kind='barh', ax=ax_coef)
+                 ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})')
+                 ax_coef.set_xlabel('Absolute Mean Coefficient Value')
+                 ax_coef.invert_yaxis()
+                 st.pyplot(fig_coef)
+                 plt.close(fig_coef)
+            else:
+                 st.warning("Could not match feature coefficients to feature names. Number of coefficients and feature names do not match.")
+
+         except Exception as e:
+            st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
 
     # Predict (with submit button)
     if st.button("Generate Prediction Report"):
@@ -125,7 +232,7 @@ if loaded_models is not None and df is not None:
         # Preprocess the input data using the fitted preprocessor
         input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
 
-        st.header("3. Prediction Results")
+        st.header("4. Prediction Results")
 
         # Get the selected model
         if selected_model_name in loaded_models:
@@ -146,126 +253,6 @@ if loaded_models is not None and df is not None:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Normal Weight' category. This suggests you are currently maintaining a healthy weight.")
             elif 'Insufficient_Weight' in prediction[0]:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
-
-            # --- Add Visualizations and Comparison ---
-            st.header("4. Model Performance and Insights")
-
-            if not model_performance_df.empty:
-                st.subheader("4.1 Model Performance Comparison")
-
-                # Display a table of performance metrics
-                st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
-
-                # Accuracy Over Models Line Chart
-                model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
-                fig1, ax1 = plt.subplots(figsize=(10, 6))
-                sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-                ax1.set_title('Model Performance Comparison Across Metrics (Line Plot)')
-                ax1.set_ylabel('Score')
-                ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
-                ax1.legend(title='Metric')
-                st.pyplot(fig1)
-                plt.close(fig1)
-
-                # Comparison of Metrics (Grouped Bar Chart)
-                model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
-                fig2, ax2 = plt.subplots(figsize=(12, 7))
-                sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
-                ax2.set_title('Comparison of Performance Metrics Across Models (Bar Plot)')
-                ax2.set_ylabel('Score')
-                ax2.legend(title='Metric')
-                st.pyplot(fig2)
-                plt.close(fig2)
-
-
-            # Feature Importance (Horizontal Bar Chart)
-            if hasattr(model, 'feature_importances_'):
-                st.subheader(f"4.2 Feature Importance ({selected_model_name})")
-                # Get feature names after preprocessing
-                try:
-                    feature_names = []
-                    for name, transformer, cols in preprocessor_deploy.transformers_:
-                        if hasattr(transformer, 'get_feature_names_out'):
-                             if isinstance(cols, str): # Handle single column case
-                                 feature_names.extend(transformer.get_feature_names_out([cols]))
-                             else: # Handle multiple columns
-                                 feature_names.extend(transformer.get_feature_names_out(cols))
-                        elif name == 'num': # For numerical columns, the names are the original column names
-                             feature_names.extend(cols)
-
-                    if preprocessor_deploy.remainder == 'passthrough':
-                         all_input_cols = list(X_train_deploy.columns)
-                         processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
-                         remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
-                         feature_names.extend(remaining_cols)
-
-                    importances = model.feature_importances_
-                    if len(importances) == len(feature_names):
-                        feat_importances = pd.Series(importances, index=feature_names)
-                        feat_importances = feat_importances.sort_values(ascending=False)
-
-                        fig4, ax4 = plt.subplots(figsize=(10, 7))
-                        feat_importances.plot(kind='barh', ax=ax4)
-                        ax4.set_title(f'Feature Importances ({selected_model_name})')
-                        ax4.set_xlabel('Importance')
-                        ax4.invert_yaxis()
-                        st.pyplot(fig4)
-                        plt.close(fig4)
-                    else:
-                         st.warning("Could not match feature importances to feature names. Number of importances and feature names do not match.")
-
-                except Exception as e:
-                    st.error(f"An error occurred while generating Feature Importance chart: {e}")
-
-            elif hasattr(model, 'coef_'):
-                 st.subheader(f"4.2 Feature Coefficients ({selected_model_name})")
-                 try:
-                    feature_names = []
-                    for name, transformer, cols in preprocessor_deploy.transformers_:
-                        if hasattr(transformer, 'get_feature_names_out'):
-                             if isinstance(cols, str):
-                                 feature_names.extend(transformer.get_feature_names_out([cols]))
-                             else:
-                                 feature_names.extend(transformer.get_feature_names_out(cols))
-                        elif name == 'num':
-                             feature_names.extend(cols)
-
-                    if preprocessor_deploy.remainder == 'passthrough':
-                         all_input_cols = list(X_train_deploy.columns)
-                         processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
-                         remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
-                         feature_names.extend(remaining_cols)
-
-                    coef_values = np.abs(model.coef_).mean(axis=0)
-
-                    if len(coef_values) == len(feature_names):
-                         feat_coef = pd.Series(coef_values, index=feature_names)
-                         feat_coef = feat_coef.sort_values(ascending=False)
-
-                         fig_coef, ax_coef = plt.subplots(figsize=(10, 7))
-                         feat_coef.plot(kind='barh', ax=ax_coef)
-                         ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})')
-                         ax_coef.set_xlabel('Absolute Mean Coefficient Value')
-                         ax_coef.invert_yaxis()
-                         st.pyplot(fig_coef)
-                         plt.close(fig_coef)
-                    else:
-                         st.warning("Could not match feature coefficients to feature names. Number of coefficients and feature names do not match.")
-
-                 except Exception as e:
-                    st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
-
-            # Prediction Distribution (Pie / Donut Chart)
-            # For a single prediction, a distribution chart is not meaningful.
-            # This is typically for showing the distribution of predictions on a dataset.
-            # If you want to show the distribution of predicted classes on the test set,
-            # you would need to load or calculate this based on your test set evaluation.
-            # st.subheader("4.4 Predicted Class Distribution (Test Set)")
-            # Add code to calculate and display prediction distribution if test data is available.
-
-
-        else:
-            st.warning(f"Model '{selected_model_name}' not found in loaded models.")
 
 
 else:
