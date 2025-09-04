@@ -71,10 +71,17 @@ if loaded_models is not None and df is not None:
     # Create user input fields based on deployment_features
     st.header("Enter Your Data:")
     input_data = {}
+    # Define mapping for FCVC text labels to numerical values
+    fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
+    fcvc_options = list(fcvc_mapping.keys())
+
     for col in deployment_features:
         if col in categorical_cols_for_preprocessor:
             options = list(df[col].unique())
             input_data[col] = st.selectbox(f"{col}:", options)
+        elif col == 'FCVC': # Handle FCVC separately with selectbox
+             selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
+             input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
         elif col in numerical_cols_for_preprocessor:
             # Add units to the description
             if col == 'Weight':
@@ -83,8 +90,6 @@ if loaded_models is not None and df is not None:
                  input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
             elif col == 'Age':
                  input_data[col] = st.number_input(f"{col} (years):", value=0.0, help="Enter age in years") # Updated label and help
-            elif col == 'FCVC':
-                 input_data[col] = st.number_input("Frequency of consumption of vegetables (per day):", value=0.0, help="Enter frequency of consumption of vegetables (e.g., 2.0)") # Changed label for FCVC
             else:
                 input_data[col] = st.number_input(f"{col}:", value=0.0)
 
