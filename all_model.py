@@ -6,8 +6,6 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
-# Removed arff import: from scipy.io import arff
-
 # Load the model
 try:
     loaded_models = load('all_classification_models.joblib')
@@ -24,9 +22,6 @@ deployment_features = ['Gender', 'Weight', 'Height', 'FCVC', 'Age']
 try:
     csv_file_path = 'ObesityDataSet.csv' # Changed to CSV file path
     df = pd.read_csv(csv_file_path) # Changed to read from CSV
-
-    # If the CSV contains byte strings, you might still need this decoding step
-    # df = df.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
 
 except FileNotFoundError:
     st.error("Error: 'ObesityDataSet.csv' not found. Please ensure the data file is available.")
@@ -58,14 +53,14 @@ if df is not None:
 st.title("Obesity Level Prediction")
 
 if loaded_models is not None and df is not None:
-    # Model Selection Dropdown
-    model_choices = list(loaded_models.keys())
-    selected_model_name = st.selectbox("Choose a Model:", model_choices)
+    # Remove model selection dropdown
+    # model_choices = list(loaded_models.keys())
+    # selected_model_name = st.selectbox("Choose a Model:", model_choices)
 
     # Get the selected model
-    selected_model = loaded_models[selected_model_name]
+    # selected_model = loaded_models[selected_model_name]
 
-    st.write(f"Using the {selected_model_name} model for prediction.")
+    # st.write(f"Using the {selected_model_name} model for prediction.")
 
     # Create user input fields based on deployment_features
     st.header("Enter Your Data:")
@@ -73,6 +68,7 @@ if loaded_models is not None and df is not None:
     # Define mapping for FCVC text labels to numerical values
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
     fcvc_options = list(fcvc_mapping.keys())
+
 
     for col in deployment_features:
         if col in categorical_cols_for_preprocessor:
@@ -100,22 +96,32 @@ if loaded_models is not None and df is not None:
         # Preprocess the input data using the fitted preprocessor
         input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
 
+        st.header("Prediction Results:")
 
-        # Make prediction
-        prediction = selected_model.predict(input_data_processed)
+        # Define the models to use for prediction
+        models_to_predict = ['Decision Tree', 'Random Forest', 'Support Vector Machine']
 
-        st.header("Prediction Result:")
-        st.write(f"Predicted Obesity Level: **{prediction[0]}**")
+        for model_name in models_to_predict:
+            if model_name in loaded_models:
+                model = loaded_models[model_name]
+                # Make prediction
+                prediction = model.predict(input_data_processed)
 
-        # Add a simple interpretation based on the prediction
-        if 'Obesity' in prediction[0]:
-            st.write("This suggests a higher risk of health issues associated with obesity.")
-        elif 'Overweight' in prediction[0]:
-            st.write("This suggests you are at risk of developing obesity.")
-        elif 'Normal_Weight' in prediction[0]:
-            st.write("This suggests you are currently maintaining a healthy weight.")
-        elif 'Insufficient_Weight' in prediction[0]:
-            st.write("This suggests you are underweight, which can also lead to health concerns.")
+                st.write(f"**{model_name} Prediction:** {prediction[0]}")
+
+                # Add a simple interpretation based on the prediction
+                if 'Obesity' in prediction[0]:
+                    st.write("  This suggests a higher risk of health issues associated with obesity.")
+                elif 'Overweight' in prediction[0]:
+                    st.write("  This suggests you are at risk of developing obesity.")
+                elif 'Normal_Weight' in prediction[0]:
+                    st.write("  This suggests you are currently maintaining a healthy weight.")
+                elif 'Insufficient_Weight' in prediction[0]:
+                    st.write("  This suggests you are underweight, which can also lead to health concerns.")
+                st.write("---") # Separator for each model's output
+            else:
+                st.warning(f"Model '{model_name}' not found in loaded models.")
+
 
 else:
     st.warning("Model or data not loaded. Please ensure 'all_classification_models.joblib' and 'ObesityDataSet.csv' are in the correct directory.")
