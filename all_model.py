@@ -120,11 +120,11 @@ if loaded_models is not None and df is not None:
             elif 'Insufficient_Weight' in prediction[0]:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
 
-            # --- Add Visualizations ---
+            # --- Add Visualizations and Comparison ---
             st.header("4. Model Performance and Insights")
 
-            # 1. Accuracy Over Models (Line Chart)
             # Assuming you have a DataFrame or dictionary with model performance metrics
+            # In a real scenario, you'd load or calculate these metrics.
             model_performance_data = {
                 'Model': ['Decision Tree', 'Random Forest', 'Support Vector Machine'],
                 'Accuracy': [0.9456, 0.9504, 0.9598],
@@ -135,6 +135,10 @@ if loaded_models is not None and df is not None:
             model_performance_df = pd.DataFrame(model_performance_data)
 
             st.subheader("4.1 Model Performance Comparison")
+
+            # Display a table of performance metrics
+            st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
+
 
             # Accuracy Over Models Line Chart
             fig1, ax1 = plt.subplots(figsize=(10, 6))
