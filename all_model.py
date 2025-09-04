@@ -123,9 +123,8 @@ if loaded_models is not None and df is not None:
             # --- Add Visualizations ---
             st.header("4. Model Performance and Insights")
 
-            # 1. Accuracy Over Models (Bar Chart)
-            # Assuming you have a DataFrame or dictionary with model performance metrics (e.g., cls_results_top5_df)
-            # In a real scenario, you'd load or calculate these metrics.
+            # 1. Accuracy Over Models (Line Chart)
+            # Assuming you have a DataFrame or dictionary with model performance metrics
             model_performance_data = {
                 'Model': ['Decision Tree', 'Random Forest', 'Support Vector Machine'],
                 'Accuracy': [0.9456, 0.9504, 0.9598],
@@ -137,13 +136,14 @@ if loaded_models is not None and df is not None:
 
             st.subheader("4.1 Model Performance Comparison")
 
-            # Accuracy Over Models Bar Chart
+            # Accuracy Over Models Line Chart
             fig1, ax1 = plt.subplots(figsize=(10, 6))
-            sns.barplot(x='Model', y='Accuracy', data=model_performance_df, ax=ax1)
+            sns.lineplot(x='Model', y='Accuracy', data=model_performance_df, marker='o', ax=ax1)
             ax1.set_title('Accuracy Comparison Across Models')
             ax1.set_ylabel('Accuracy')
+            ax1.set_ylim(0.85, 1.0) # Set y-axis limits for better visualization
             st.pyplot(fig1)
-            plt.close(fig1) # Close the figure to prevent it from displaying again
+            plt.close(fig1)
 
 
             # Comparison of Metrics (Grouped Bar Chart)
@@ -155,15 +155,6 @@ if loaded_models is not None and df is not None:
             ax2.legend(title='Metric')
             st.pyplot(fig2)
             plt.close(fig2)
-
-
-            # Confusion Matrix (Heatmap, Simplified) - Only if test data is available and appropriate
-            # For a single prediction, a confusion matrix is not meaningful.
-            # If you have test data and want to display the confusion matrix for the selected model's performance on the test set,
-            # you would need to load the test data and make predictions on it here.
-            # This is a placeholder for where you would add that logic if needed.
-            # st.subheader("4.3 Confusion Matrix (Test Set Performance)")
-            # Add code to calculate and display confusion matrix if test data is available.
 
 
             # Feature Importance (Horizontal Bar Chart)
