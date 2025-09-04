@@ -76,7 +76,17 @@ if loaded_models is not None and df is not None:
             options = list(df[col].unique())
             input_data[col] = st.selectbox(f"{col}:", options)
         elif col in numerical_cols_for_preprocessor:
-            input_data[col] = st.number_input(f"{col}:", value=0.0)
+            # Add help text with example values and units
+            if col == 'Weight':
+                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter weight in kg (e.g., 60)")
+            elif col == 'Height':
+                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter height in meters (e.g., 1.75)")
+            elif col == 'Age':
+                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter age in years (e.g., 30)")
+            elif col == 'FCVC':
+                 input_data[col] = st.number_input(f"{col}:", value=0.0, help="Enter frequency of consumption of vegetables (e.g., 2.0)")
+            else:
+                input_data[col] = st.number_input(f"{col}:", value=0.0)
 
     # Predict (with submit button)
     if st.button("Predict Obesity Level"):
