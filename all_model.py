@@ -2,10 +2,10 @@ import streamlit as st
 from joblib import load
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -53,6 +53,33 @@ if df is not None:
 
     preprocessor_deploy.fit(X_train_deploy)
 
+    # Preprocess the entire dataset for model evaluation
+    X_processed_full = preprocessor_deploy.transform(df[deployment_features])
+    y_full = df['NObeyesdad']
+
+    # Calculate performance metrics for all loaded models on the full dataset
+    # In a real-world scenario, you would use a separate test set for unbiased evaluation.
+    # For demonstration in this deployment app, we are using the full dataset.
+    model_performance_data = []
+    if loaded_models:
+        for name, model in loaded_models.items():
+            try:
+                y_pred_full = model.predict(X_processed_full)
+                accuracy = accuracy_score(y_full, y_pred_full)
+                precision = precision_score(y_full, y_pred_full, average='macro', zero_division=0)
+                recall = recall_score(y_full, y_pred_full, average='macro', zero_division=0)
+                f1 = f1_score(y_full, y_pred_full, average='macro', zero_division=0)
+                model_performance_data.append({
+                    'Model': name,
+                    'Accuracy': accuracy,
+                    'Precision': precision,
+                    'Recall': recall,
+                    'F1 Score': f1
+                })
+            except Exception as e:
+                st.warning(f"Could not calculate performance metrics for {name}: {e}")
+    model_performance_df = pd.DataFrame(model_performance_data)
+
 
 # Streamlit App Title
 st.title("Obesity Level Prediction Report")
@@ -86,7 +113,7 @@ if loaded_models is not None and df is not None:
 
     # Model Selection using Radio Buttons
     st.header("2. Model Selection")
-    models_to_choose = ['Decision Tree', 'Random Forest', 'Support Vector Machine']
+    models_to_choose = list(loaded_models.keys())
     selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
 
 
@@ -123,44 +150,32 @@ if loaded_models is not None and df is not None:
             # --- Add Visualizations and Comparison ---
             st.header("4. Model Performance and Insights")
 
-            # Assuming you have a DataFrame or dictionary with model performance metrics
-            # In a real scenario, you'd load or calculate these metrics.
-            model_performance_data = {
-                'Model': ['Decision Tree', 'Random Forest', 'Support Vector Machine'],
-                'Accuracy': [0.9456, 0.9504, 0.9598],
-                'Precision': [0.9476, 0.9524, 0.9586],
-                'Recall': [0.9440, 0.9485, 0.9586],
-                'F1 Score': [0.9450, 0.9495, 0.9583]
-            }
-            model_performance_df = pd.DataFrame(model_performance_data)
+            if not model_performance_df.empty:
+                st.subheader("4.1 Model Performance Comparison")
 
-            st.subheader("4.1 Model Performance Comparison")
+                # Display a table of performance metrics
+                st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
-            # Display a table of performance metrics
-            st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
+                # Accuracy Over Models Line Chart
+                model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
+                fig1, ax1 = plt.subplots(figsize=(10, 6))
+                sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+                ax1.set_title('Model Performance Comparison Across Metrics (Line Plot)')
+                ax1.set_ylabel('Score')
+                ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+                ax1.legend(title='Metric')
+                st.pyplot(fig1)
+                plt.close(fig1)
 
-
-            # Accuracy Over Models Line Chart - Modified to include all metrics
-            model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
-            fig1, ax1 = plt.subplots(figsize=(10, 6))
-            sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-            ax1.set_title('Model Performance Comparison Across Metrics (Line Plot)')
-            ax1.set_ylabel('Score')
-            ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
-            ax1.legend(title='Metric')
-            st.pyplot(fig1)
-            plt.close(fig1)
-
-
-            # Comparison of Metrics (Grouped Bar Chart) - Already includes all metrics
-            model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
-            fig2, ax2 = plt.subplots(figsize=(12, 7))
-            sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
-            ax2.set_title('Comparison of Performance Metrics Across Models (Bar Plot)')
-            ax2.set_ylabel('Score')
-            ax2.legend(title='Metric')
-            st.pyplot(fig2)
-            plt.close(fig2)
+                # Comparison of Metrics (Grouped Bar Chart)
+                model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
+                fig2, ax2 = plt.subplots(figsize=(12, 7))
+                sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
+                ax2.set_title('Comparison of Performance Metrics Across Models (Bar Plot)')
+                ax2.set_ylabel('Score')
+                ax2.legend(title='Metric')
+                st.pyplot(fig2)
+                plt.close(fig2)
 
 
             # Feature Importance (Horizontal Bar Chart)
