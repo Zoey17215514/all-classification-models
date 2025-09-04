@@ -6,6 +6,8 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
+# Removed arff import: from scipy.io import arff
+
 # Load the model
 try:
     loaded_models = load('all_classification_models.joblib')
@@ -22,6 +24,9 @@ deployment_features = ['Gender', 'Weight', 'Height', 'FCVC', 'Age']
 try:
     csv_file_path = 'ObesityDataSet.csv' # Changed to CSV file path
     df = pd.read_csv(csv_file_path) # Changed to read from CSV
+
+    # If the CSV contains byte strings, you might still need this decoding step
+    # df = df.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
 
 except FileNotFoundError:
     st.error("Error: 'ObesityDataSet.csv' not found. Please ensure the data file is available.")
@@ -69,7 +74,6 @@ if loaded_models is not None and df is not None:
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
     fcvc_options = list(fcvc_mapping.keys())
 
-
     for col in deployment_features:
         if col in categorical_cols_for_preprocessor:
             options = list(df[col].unique())
@@ -95,6 +99,7 @@ if loaded_models is not None and df is not None:
 
         # Preprocess the input data using the fitted preprocessor
         input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
+
 
         # Make prediction
         prediction = selected_model.predict(input_data_processed)
