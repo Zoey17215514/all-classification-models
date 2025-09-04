@@ -1,11 +1,10 @@
 import streamlit as st
 from joblib import load
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-
-# Removed arff import: from scipy.io import arff
 
 # Load the model
 try:
@@ -23,9 +22,6 @@ deployment_features = ['Gender', 'Weight', 'Height', 'FCVC', 'Age']
 try:
     csv_file_path = 'ObesityDataSet.csv' # Changed to CSV file path
     df = pd.read_csv(csv_file_path) # Changed to read from CSV
-
-    # If the CSV contains byte strings, you might still need this decoding step
-    # df = df.applymap(lambda x: x.decode('utf-8') if isinstance(x, bytes) else x)
 
 except FileNotFoundError:
     st.error("Error: 'ObesityDataSet.csv' not found. Please ensure the data file is available.")
@@ -73,6 +69,7 @@ if loaded_models is not None and df is not None:
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
     fcvc_options = list(fcvc_mapping.keys())
 
+
     for col in deployment_features:
         if col in categorical_cols_for_preprocessor:
             options = list(df[col].unique())
@@ -87,7 +84,7 @@ if loaded_models is not None and df is not None:
             elif col == 'Height':
                  input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
             elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col} (years):", value=0, help="Enter age in years") # Updated label and help
+                 input_data[col] = st.number_input(f"{col} (years):", value=0.0, help="Enter age in years") # Updated label and help
             else:
                 input_data[col] = st.number_input(f"{col}:", value=0.0)
 
@@ -98,7 +95,6 @@ if loaded_models is not None and df is not None:
 
         # Preprocess the input data using the fitted preprocessor
         input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
-
 
         # Make prediction
         prediction = selected_model.predict(input_data_processed)
