@@ -126,11 +126,11 @@ if loaded_models is not None and df is not None:
             # Assuming you have a DataFrame or dictionary with model performance metrics
             # In a real scenario, you'd load or calculate these metrics.
             model_performance_data = {
-                'Model': ['Logistic Regression', 'Decision Tree', 'Random Forest', 'Support Vector Machine'],
-                'Accuracy': [0.8818, 0.9456, 0.9504, 0.9598],
-                'Precision': [0.8778, 0.9476, 0.9524, 0.9586],
-                'Recall': [0.8793, 0.9440, 0.9485, 0.9586],
-                'F1 Score': [0.8780, 0.9450, 0.9495, 0.9583]
+                'Model': ['Decision Tree', 'Random Forest', 'Support Vector Machine'],
+                'Accuracy': [0.9456, 0.9504, 0.9598],
+                'Precision': [0.9476, 0.9524, 0.9586],
+                'Recall': [0.9440, 0.9485, 0.9586],
+                'F1 Score': [0.9450, 0.9495, 0.9583]
             }
             model_performance_df = pd.DataFrame(model_performance_data)
 
