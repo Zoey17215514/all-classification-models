@@ -136,10 +136,6 @@ if loaded_models is not None and df is not None:
 
             st.subheader("4.1 Model Performance Comparison")
 
-            # Display a table of performance metrics
-            st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
-
-
             # Accuracy Over Models Line Chart
             fig1, ax1 = plt.subplots(figsize=(10, 6))
             sns.lineplot(x='Model', y='Accuracy', data=model_performance_df, marker='o', ax=ax1)
@@ -160,6 +156,8 @@ if loaded_models is not None and df is not None:
             st.pyplot(fig2)
             plt.close(fig2)
 
+            # Display a table of performance metrics
+            st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
             # Feature Importance (Horizontal Bar Chart)
             if hasattr(model, 'feature_importances_'):
