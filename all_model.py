@@ -127,9 +127,9 @@ if loaded_models is not None and df is not None:
 
         # Accuracy Over Models Line Chart
         model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
-        fig1, ax1 = plt.subplots(figsize=(10, 6))
+        fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
         sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-        ax1.set_title('Model Performance Comparison Across Metrics (Line Plot)')
+        ax1.set_title('Model Performance Comparison (Line Plot)')
         ax1.set_ylabel('Score')
         ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
         ax1.legend(title='Metric')
@@ -138,9 +138,9 @@ if loaded_models is not None and df is not None:
 
         # Comparison of Metrics (Grouped Bar Chart)
         model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
-        fig2, ax2 = plt.subplots(figsize=(12, 7))
+        fig2, ax2 = plt.subplots(figsize=(10, 6)) # Smaller figure size
         sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
-        ax2.set_title('Comparison of Performance Metrics Across Models (Bar Plot)')
+        ax2.set_title('Comparison of Performance Metrics (Bar Plot)')
         ax2.set_ylabel('Score')
         ax2.legend(title='Metric')
         st.pyplot(fig2)
@@ -168,12 +168,13 @@ if loaded_models is not None and df is not None:
                  remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
                  feature_names.extend(remaining_cols)
 
+
             importances = model.feature_importances_
             if len(importances) == len(feature_names):
                 feat_importances = pd.Series(importances, index=feature_names)
                 feat_importances = feat_importances.sort_values(ascending=False)
 
-                fig4, ax4 = plt.subplots(figsize=(10, 7))
+                fig4, ax4 = plt.subplots(figsize=(8, 6)) # Smaller figure size
                 feat_importances.plot(kind='barh', ax=ax4)
                 ax4.set_title(f'Feature Importances ({selected_model_name})')
                 ax4.set_xlabel('Importance')
@@ -211,7 +212,7 @@ if loaded_models is not None and df is not None:
                  feat_coef = pd.Series(coef_values, index=feature_names)
                  feat_coef = feat_coef.sort_values(ascending=False)
 
-                 fig_coef, ax_coef = plt.subplots(figsize=(10, 7))
+                 fig_coef, ax_coef = plt.subplots(figsize=(8, 6)) # Smaller figure size
                  feat_coef.plot(kind='barh', ax=ax_coef)
                  ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})')
                  ax_coef.set_xlabel('Absolute Mean Coefficient Value')
@@ -223,6 +224,7 @@ if loaded_models is not None and df is not None:
 
          except Exception as e:
             st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
+
 
     # Predict (with submit button)
     if st.button("Generate Prediction Report"):
@@ -253,6 +255,33 @@ if loaded_models is not None and df is not None:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Normal Weight' category. This suggests you are currently maintaining a healthy weight.")
             elif 'Insufficient_Weight' in prediction[0]:
                 st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
+
+
+            # Add a pie chart for risk distribution (using predict_proba if available)
+            if hasattr(model, 'predict_proba'):
+                st.subheader("Risk Distribution by Obesity Level:")
+                # Get the probability distribution for the prediction
+                probabilities = model.predict_proba(input_data_processed)[0]
+
+                # Get the class labels
+                class_labels = model.classes_
+
+                # Create a pandas Series for easy plotting
+                risk_distribution = pd.Series(probabilities, index=class_labels)
+
+                # Filter for the desired classes
+                target_classes = ['Insufficient_Weight', 'Normal_Weight', 'Obesity_Type_I', 'Obesity_Type_II', 'Obesity_Type_III']
+                risk_distribution_filtered = risk_distribution[risk_distribution.index.isin(target_classes)]
+
+                # Plot the pie chart
+                fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
+                risk_distribution_filtered.plot.pie(autopct='%1.1f%%', startangle=90, ax=ax_pie)
+                ax_pie.set_title('Risk Distribution for Key Obesity Levels')
+                ax_pie.set_ylabel('') # Remove the default y-label
+                st.pyplot(fig_pie)
+                plt.close(fig_pie)
+            else:
+                st.info("The selected model does not support probability prediction (predict_proba) for the pie chart.")
 
 
 else:
