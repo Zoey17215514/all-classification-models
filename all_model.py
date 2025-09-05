@@ -13,10 +13,10 @@ from sklearn.svm import SVC # Import SVC
 
 # Load the model
 try:
-    loaded_models = load('all_classification_models.joblib')
+    loaded_models = load('all_k-fold_models.joblib')
     st.success("All classification models loaded successfully.")
 except FileNotFoundError:
-    st.error("Error: 'all_classification_models.joblib' not found. Please ensure the models are saved.")
+    st.error("Error: 'all_k-fold_models.joblib' not found. Please ensure the models are saved.")
     loaded_models = None # Set to None to prevent errors if the file is not found
 
 
@@ -122,33 +122,143 @@ if loaded_models is not None and df is not None:
     selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
 
 
+    # Feature Importance (Horizontal Bar Chart) - Moved below Model Selection
+    st.header("2.1 Feature Importance") # New section header
+
+    # Need to select a model here to display its feature importances/coefficients
+    if loaded_models:
+        # Use the selected model for displaying feature importance/coefficients
+        model_for_importance = loaded_models[selected_model_name]
+
+        # Get feature names after preprocessing - This part now runs after preprocessor is fitted
+        try:
+            feature_names = []
+            for name, transformer, cols in preprocessor_deploy.transformers_:
+                if transformer != 'passthrough': # Check if the transformer is not 'passthrough'
+                    if hasattr(transformer, 'get_feature_names_out'):
+                         if isinstance(cols, str): # Handle single column case
+                             feature_names.extend(transformer.get_feature_names_out([cols]))
+                         else: # Handle multiple columns
+                             feature_names.extend(transformer.get_feature_names_out(cols))
+                    # Handle cases where the transformer is fitted but doesn't have get_feature_names_out
+                    # This might require inspecting the transformer type (e.g., StandardScaler)
+                    elif hasattr(transformer, 'n_features_in_'): # For transformers like StandardScaler
+                         if isinstance(cols, str):
+                             feature_names.append(cols)
+                         else:
+                             feature_names.extend(cols)
+                else: # Handle 'passthrough'
+                     if isinstance(cols, str):
+                         feature_names.append(cols)
+                     else:
+                         feature_names.extend(cols)
+
+
+            # Ensure feature names are unique and in a consistent order
+            feature_names = list(dict.fromkeys(feature_names))
+            # You might need to sort feature_names based on how the preprocessor orders output if order is critical
+
+            if hasattr(model_for_importance, 'feature_importances_'):
+                st.subheader(f"Feature Importance ({selected_model_name})") # Updated title and model name
+                importances = model_for_importance.feature_importances_ # Use the selected model's importances
+                if len(importances) == len(feature_names):
+                    feat_importances = pd.Series(importances, index=feature_names)
+                    feat_importances = feat_importances.sort_values(ascending=False)
+
+                    fig4, ax4 = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                    feat_importances.plot(kind='barh', ax=ax4)
+                    ax4.set_title(f'Feature Importances ({selected_model_name})') # Updated title
+                    ax4.set_xlabel('Importance')
+                    ax4.invert_yaxis()
+                    st.pyplot(fig4)
+                    plt.close(fig4)
+                else:
+                     st.warning(f"Could not match feature importances to feature names. Number of importances ({len(importances)}) and feature names ({len(feature_names)}) do not match.")
+
+            elif hasattr(model_for_importance, 'coef_'):
+                 st.subheader(f"Feature Coefficients ({selected_model_name})") # Updated title and model name
+                 coef_values = np.abs(model_for_importance.coef_).mean(axis=0) # Use the selected model's coefficients
+
+                 if len(coef_values) == len(feature_names):
+                     feat_coef = pd.Series(coef_values, index=feature_names)
+                     feat_coef = feat_coef.sort_values(ascending=False)
+
+                     fig_coef, ax_coef = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                     feat_coef.plot(kind='barh', ax=ax_coef)
+                     ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})') # Updated title
+                     ax_coef.set_xlabel('Absolute Mean Coefficient Value')
+                     ax_coef.invert_yaxis()
+                     st.pyplot(fig_coef)
+                     plt.close(fig_coef)
+                 else:
+                     st.warning(f"Could not match feature coefficients to feature names. Number of coefficients ({len(coef_values)}) and feature names ({len(feature_names)}) do not match.")
+
+        except Exception as e:
+            st.error(f"An error occurred while generating Feature Importance chart: {e}")
+
+
     st.header("3. User Input Data") # Changed section header
     input_data = {}
     # Define mapping for FCVC text labels to numerical values
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
     fcvc_options = list(fcvc_mapping.keys())
 
+    # Create columns for Age, Height, and Weight
+    col_age, col_height, col_weight = st.columns(3)
+    with col_age:
+        col = 'Age'
+        if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+        elif col in numerical_cols_for_preprocessor:
+             input_data[col] = st.number_input(f"{col} (years):", value=0, min_value=0, help="Enter age in years") # Updated label and help
 
-    for col in deployment_features:
+    with col_height:
+        col = 'Height'
+        if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+        elif col in numerical_cols_for_preprocessor:
+            input_data[col] = st.number_input(f"{col} (m):", value=0.0, min_value=0.0, help="Enter height in meters") # Updated label and help
+
+    with col_weight:
+        col = 'Weight'
+        if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+        elif col in numerical_cols_for_preprocessor:
+            input_data[col] = st.number_input(f"{col} (kg):", value=0.0, min_value=0.0, help="Enter weight in kilograms") # Updated label and help
+
+    # Create columns for FCVC and NCP
+    col_fcvc, col_ncp = st.columns(2)
+
+    with col_fcvc:
+        col = 'FCVC'
         if col in categorical_cols_for_preprocessor:
             options = list(df[col].unique())
             input_data[col] = st.selectbox(f"{col}:", options)
         elif col == 'FCVC': # Handle FCVC separately with selectbox
              selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
              input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
-        elif col == 'NCP': # Handle NCP with number input and range
-             # Changed to radio button input
+
+    with col_ncp:
+        col = 'NCP'
+        if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+        elif col == 'NCP': # Handle NCP with radio button input
              input_data[col] = st.radio("Number of main meals per day:", options=[1.0, 2.0, 3.0, 4.0])
-        elif col in numerical_cols_for_preprocessor:
-            # Add units to the description
-            if col == 'Weight':
-                 input_data[col] = st.number_input(f"{col} (kg):", value=0.0, min_value=0.0, help="Enter weight in kilograms") # Updated label and help
-            elif col == 'Height':
-                 input_data[col] = st.number_input(f"{col} (m):", value=0.0, min_value=0.0, help="Enter height in meters") # Updated label and help
-            elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col} (years):", value=0, min_value=0, help="Enter age in years") # Updated label and help
-            else:
-                input_data[col] = st.number_input(f"{col}:", value=0.0)
+
+
+    # Handle any remaining deployment features that were not explicitly placed in columns
+    remaining_features = [col for col in deployment_features if col not in ['Age', 'Height', 'Weight', 'FCVC', 'NCP']]
+    for col in remaining_features:
+         if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+         elif col in numerical_cols_for_preprocessor:
+            input_data[col] = st.number_input(f"{col}:", value=0.0, min_value=0.0) # Assuming remaining numerical features should also be non-negative
+
 
     # Predict (with submit button)
     if st.button("Generate Prediction Report"):
@@ -209,4 +319,4 @@ if loaded_models is not None and df is not None:
 
 
 else:
-    st.warning("Model or data not loaded. Please ensure 'all_classification_models.joblib' and 'ObesityDataSet.csv' are in the correct directory.")
+    st.warning("Model or data not loaded. Please ensure 'all_k-fold_models.joblib' and 'ObesityDataSet.csv' are in the correct directory.")
