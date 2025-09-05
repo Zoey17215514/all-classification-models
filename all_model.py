@@ -15,6 +15,9 @@ from sklearn.inspection import permutation_importance # Import permutation_impor
 
 # Load the combined models and K-Fold results
 combined_data = {}
+loaded_models = None # Initialize loaded_models
+all_kfold_results = {} # Initialize all_kfold_results
+
 try:
     combined_filename = 'all_results_and_models.joblib'
     combined_data = load(combined_filename)
@@ -24,12 +27,12 @@ try:
     if loaded_models:
         st.success(f"Models and K-Fold results loaded successfully from '{combined_filename}'.")
     else:
-         st.error(f"Error: 'models' key not found in '{combined_filename}'.")
+         st.error(f"Error: 'models' key not found in '{combined_filename}'. Please ensure the combined file was created correctly.")
          loaded_models = None # Ensure loaded_models is None if models key is missing
 
 
 except FileNotFoundError:
-    st.error(f"Error: '{combined_filename}' not found. Please ensure the combined file is saved.")
+    st.error(f"Error: '{combined_filename}' not found. Please ensure the combined file was saved by running the cell that creates it.")
     loaded_models = None # Set loaded_models to None if the file is not found
     all_kfold_results = {} # Ensure kfold_results is empty if file is not found
 except Exception as e:
@@ -98,15 +101,9 @@ if df is not None:
                 classifier_step = model.named_steps.get('classifier') if isinstance(model, Pipeline) else model # Get classifier if it's a pipeline
                 if isinstance(classifier_step, SVC) and not hasattr(classifier_step, 'predict_proba'):
                     # This case is less likely if the saved pipeline had probability=True during training
-                    # But adding a check just in case. Refitting within the app is generally not recommended
-                    # st.warning(f"SVM model '{name}' in loaded pipeline does not support probability prediction directly. Attempting to refit.")
-                    # try:
-                    #     # Recreate and refit with probability=True - this is complex with pipelines
-                    #     # A better approach is to ensure the saved pipeline's SVC had probability=True
-                    #     pass # Skip refitting here in the app for simplicity
-                    # except Exception as refit_e:
-                    #      st.error(f"Could not refit SVM pipeline for probability: {refit_e}")
+                    # If the loaded model needs probability set, you might need to refit or ensure it was saved correctly
                     pass # Assume the loaded pipeline is ready for prediction
+
 
                 # Calculate metrics on the single test split (for demonstration in the app)
                 # Predict using the loaded model (which is a pipeline if saved as such)
@@ -114,8 +111,9 @@ if df is not None:
 
                 accuracy_single = accuracy_score(y_test_eval, y_pred_eval)
                 precision_single = precision_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
-                recall_single = recall_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
-                f1_single = f1_score(y_test_eval, y_test_eval, average='macro', zero_division=0) # Fixed typo y_pred_eval
+                recall_single = recall_score(y_test_eval, y_test_eval, average='macro', zero_division=0) # Fixed typo y_pred_eval
+                f1_single = f1_score(y_test_eval, y_pred_eval, average='macro', zero_division=0) # Fixed typo y_test_eval
+
 
                 # Prepare data row for the table
                 row_data = {
@@ -246,8 +244,12 @@ if loaded_models is not None and df is not None:
 
     # Model Selection using Radio Buttons
     st.header("2. Model Selection")
-    models_to_choose = list(loaded_models.keys())
-    selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
+    models_to_choose = list(loaded_models.keys()) if loaded_models else []
+    if models_to_choose:
+        selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
+    else:
+        st.warning("No models loaded for selection.")
+        selected_model_name = None
 
 
     st.header("3. User Input Data") # Changed section header
@@ -320,7 +322,8 @@ if loaded_models is not None and df is not None:
 
         st.header("4. Prediction Results")
 
-        if input_data_processed is not None:
+        # Check if a model is selected and data is processed before predicting
+        if selected_model_name and input_data_processed is not None:
             # Get the selected model
             if selected_model_name in loaded_models:
                 model = loaded_models[selected_model_name]
@@ -452,6 +455,8 @@ if loaded_models is not None and df is not None:
 
                 else:
                     st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
+            else:
+                 st.warning(f"Selected model '{selected_model_name}' not found in loaded models.")
 
 
 else:
