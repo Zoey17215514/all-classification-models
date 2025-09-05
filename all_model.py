@@ -2,6 +2,7 @@ import streamlit as st
 from joblib import load
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split # Import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -34,6 +35,11 @@ except FileNotFoundError:
 # Create preprocessing pipelines for numerical and categorical features
 # This needs to be fitted on the training data
 if df is not None:
+    # Split data into training and testing sets for evaluation
+    X_train_eval, X_test_eval, y_train_eval, y_test_eval = train_test_split(
+        df[deployment_features], df['NObeyesdad'], test_size=0.2, random_state=42, stratify=df['NObeyesdad']
+    )
+
     # Identify categorical and numerical columns based on the deployment features
     categorical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype == 'object']
     numerical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype != 'object']
@@ -49,19 +55,14 @@ if df is not None:
         remainder='passthrough'
     )
 
-    # Fit the preprocessor with the training data used for the models
-    X_train_deploy = df[deployment_features]
-    y_train_deploy = df['NObeyesdad'] # Also need y_train for fitting the preprocessor with the target
+    # Fit the preprocessor with the training data (evaluation split)
+    preprocessor_deploy.fit(X_train_eval)
 
-    preprocessor_deploy.fit(X_train_deploy)
+    # Transform the test set for model evaluation
+    X_test_processed_eval = preprocessor_deploy.transform(X_test_eval)
+    y_test_eval = y_test_eval # Keep the original test labels
 
-    # Preprocess the entire dataset for model evaluation
-    X_processed_full = preprocessor_deploy.transform(df[deployment_features])
-    y_full = df['NObeyesdad']
-
-    # Calculate performance metrics for all loaded models on the full dataset
-    # In a real-world scenario, you would use a separate test set for unbiased evaluation.
-    # For demonstration in this deployment app, we are using the full dataset.
+    # Calculate performance metrics for all loaded models on the test set
     model_performance_data = []
     if loaded_models:
         for name, model in loaded_models.items():
@@ -70,14 +71,15 @@ if df is not None:
                 if isinstance(model, SVC) and not hasattr(model, 'predict_proba'):
                      model.probability = True
                      # Refit the model to enable probabilities (this might take time)
-                     model.fit(preprocessor_deploy.transform(df[deployment_features]), df['NObeyesdad'])
+                     # Fit on the transformed training data used for evaluation
+                     model.fit(preprocessor_deploy.transform(X_train_eval), y_train_eval)
 
 
-                y_pred_full = model.predict(X_processed_full)
-                accuracy = accuracy_score(y_full, y_pred_full)
-                precision = precision_score(y_full, y_pred_full, average='macro', zero_division=0)
-                recall = recall_score(y_full, y_pred_full, average='macro', zero_division=0) # Corrected recall calculation
-                f1 = f1_score(y_full, y_pred_full, average='macro', zero_division=0)
+                y_pred_eval = model.predict(X_test_processed_eval)
+                accuracy = accuracy_score(y_test_eval, y_pred_eval)
+                precision = precision_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
+                recall = recall_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
+                f1 = f1_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
                 model_performance_data.append({
                     'Model': name,
                     'Accuracy': accuracy,
@@ -99,7 +101,7 @@ if loaded_models is not None and df is not None:
     st.header("1. Model Performance and Insights")
 
     if not model_performance_df.empty:
-        st.subheader("1.1 Model Performance Comparison")
+        st.subheader("1.1 Model Performance Comparison (on Test Set)") # Updated title
 
         # Display a table of performance metrics
         st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
@@ -132,82 +134,89 @@ if loaded_models is not None and df is not None:
 
 
     # Feature Importance (Horizontal Bar Chart)
-    if hasattr(model, 'feature_importances_'):
-        st.subheader(f"1.2 Feature Importance ({selected_model_name})")
-        # Get feature names after preprocessing
-        try:
-            feature_names = []
-            for name, transformer, cols in preprocessor_deploy.transformers_:
-                if hasattr(transformer, 'get_feature_names_out'):
-                     if isinstance(cols, str): # Handle single column case
-                         feature_names.extend(transformer.get_feature_names_out([cols]))
-                     else: # Handle multiple columns
-                         feature_names.extend(transformer.get_feature_names_out(cols))
-                elif name == 'num': # For numerical columns, the names are the original column names
-                     feature_names.extend(cols)
+    # Need to select a model here to display its feature importances/coefficients
+    if loaded_models:
+        # Default to the first model for initial display, or add a selection widget
+        # For now, let's just show the feature importance for the first model in the loaded_models dict
+        first_model_name = list(loaded_models.keys())[0]
+        model_for_importance = loaded_models[first_model_name]
 
-            if preprocessor_deploy.remainder == 'passthrough':
-                 all_input_cols = list(X_train_deploy.columns)
-                 processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
-                 remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
-                 feature_names.extend(remaining_cols)
+        if hasattr(model_for_importance, 'feature_importances_'):
+            st.subheader(f"1.2 Feature Importance ({first_model_name})") # Updated title and model name
+            # Get feature names after preprocessing
+            try:
+                feature_names = []
+                for name, transformer, cols in preprocessor_deploy.transformers_:
+                    if hasattr(transformer, 'get_feature_names_out'):
+                         if isinstance(cols, str): # Handle single column case
+                             feature_names.extend(transformer.get_feature_names_out([cols]))
+                         else: # Handle multiple columns
+                             feature_names.extend(transformer.get_feature_names_out(cols))
+                    elif name == 'num': # For numerical columns, the names are the original column names
+                         feature_names.extend(cols)
+
+                if preprocessor_deploy.remainder == 'passthrough':
+                     all_input_cols = list(X_train_eval.columns) # Use training cols for consistency
+                     processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
+                     remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                     feature_names.extend(remaining_cols)
 
 
-            importances = model.feature_importances_
-            if len(importances) == len(feature_names):
-                feat_importances = pd.Series(importances, index=feature_names)
-                feat_importances = feat_importances.sort_values(ascending=False)
+                importances = model_for_importance.feature_importances_ # Use the selected model's importances
+                if len(importances) == len(feature_names):
+                    feat_importances = pd.Series(importances, index=feature_names)
+                    feat_importances = feat_importances.sort_values(ascending=False)
 
-                fig4, ax4 = plt.subplots(figsize=(8, 6)) # Smaller figure size
-                feat_importances.plot(kind='barh', ax=ax4)
-                ax4.set_title(f'Feature Importances ({selected_model_name})')
-                ax4.set_xlabel('Importance')
-                ax4.invert_yaxis()
-                st.pyplot(fig4)
-                plt.close(fig4)
-            else:
-                 st.warning("Could not match feature importances to feature names. Number of importances and feature names do not match.")
+                    fig4, ax4 = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                    feat_importances.plot(kind='barh', ax=ax4)
+                    ax4.set_title(f'Feature Importances ({first_model_name})') # Updated title
+                    ax4.set_xlabel('Importance')
+                    ax4.invert_yaxis()
+                    st.pyplot(fig4)
+                    plt.close(fig4)
+                else:
+                     st.warning("Could not match feature importances to feature names. Number of importances and feature names do not match.")
 
-        except Exception as e:
-            st.error(f"An error occurred while generating Feature Importance chart: {e}")
+            except Exception as e:
+                st.error(f"An error occurred while generating Feature Importance chart: {e}")
 
-    elif hasattr(model, 'coef_'):
-         st.subheader(f"1.2 Feature Coefficients ({selected_model_name})")
-         try:
-            feature_names = []
-            for name, transformer, cols in preprocessor_deploy.transformers_:
-                if hasattr(transformer, 'get_feature_names_out'):
-                     if isinstance(cols, str):
-                         feature_names.extend(transformer.get_feature_names_out([cols]))
-                     else:
-                         feature_names.extend(transformer.get_feature_names_out(cols))
-                elif name == 'num':
-                     feature_names.extend(cols)
+        elif hasattr(model_for_importance, 'coef_'):
+             st.subheader(f"1.2 Feature Coefficients ({first_model_name})") # Updated title and model name
+             try:
+                feature_names = []
+                for name, transformer, cols in preprocessor_deploy.transformers_:
+                    if hasattr(transformer, 'get_feature_names_out'):
+                         if isinstance(cols, str):
+                             feature_names.extend(transformer.get_feature_names_out([cols]))
+                         else:
+                             feature_names.extend(transformer.get_feature_names_out(cols))
+                    elif name == 'num':
+                         feature_names.extend(cols)
 
-            if preprocessor_deploy.remainder == 'passthrough':
-                 all_input_cols = list(X_train_deploy.columns)
-                 processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
-                 remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
-                 feature_names.extend(remaining_cols)
+                if preprocessor_deploy.remainder == 'passthrough':
+                     all_input_cols = list(X_train_eval.columns) # Use training cols for consistency
+                     processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
+                     remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                     feature_names.extend(remaining_cols)
 
-            coef_values = np.abs(model.coef_).mean(axis=0)
+                coef_values = np.abs(model_for_importance.coef_).mean(axis=0) # Use the selected model's coefficients
 
-            if len(coef_values) == len(feature_names):
-                 feat_coef = pd.Series(coef_values, index=feature_names)
-                 feat_coef = feat_coef.sort_values(ascending=False)
+                if len(coef_values) == len(feature_names):
+                     feat_coef = pd.Series(coef_values, index=feature_names)
+                     feat_coef = feat_coef.sort_values(ascending=False)
 
-                 fig_coef, ax_coef = plt.subplots(figsize=(8, 6)) # Smaller figure size
-                 feat_coef.plot(kind='barh', ax=ax_coef)
-                 ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})')
-                 ax_coef.set_xlabel('Absolute Mean Coefficient Value')
-                 ax_coef.invert_yaxis()
-                 st.pyplot(fig_coef)
-                 plt.close(fig_coef)
-            else:
-                 st.warning("Could not match feature coefficients to feature names. Number of coefficients and feature names do not match.")
+                     fig_coef, ax_coef = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                     feat_coef.plot(kind='barh', ax=ax_coef)
+                     ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({first_model_name})') # Updated title
+                     ax_coef.set_xlabel('Absolute Mean Coefficient Value')
+                     ax_coef.invert_yaxis()
+                     st.pyplot(fig_coef)
+                     plt.close(fig_coef)
+                else:
+                     st.warning("Could not match feature coefficients to feature names. Number of coefficients and feature names do not match.")
 
-         except Exception as e:
-            st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
+             except Exception as e:
+                st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
 
 
     # Model Selection using Radio Buttons
