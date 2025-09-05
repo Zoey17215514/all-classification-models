@@ -11,39 +11,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.svm import SVC # Import SVC
 from sklearn.inspection import permutation_importance # Import permutation_importance
-# import json # No longer need json
 
-# Load the combined models and K-Fold results
-combined_data = {}
-loaded_models = None # Initialize loaded_models
-all_kfold_results = {} # Initialize all_kfold_results
-
+# Load the model
 try:
-    combined_filename = 'all_results_and_models.joblib'
-    combined_data = load(combined_filename)
-    loaded_models = combined_data.get('models', {}) # Get models from the combined data
-    all_kfold_results = combined_data.get('kfold_metrics', {}) # Get kfold results from the combined data
-
-    if loaded_models:
-        st.success(f"Models and K-Fold results loaded successfully from '{combined_filename}'.")
-    else:
-         st.error(f"Error: 'models' key not found in '{combined_filename}'. Please ensure the combined file was created correctly.")
-         loaded_models = None # Ensure loaded_models is None if models key is missing
-
-
+    loaded_models = load('all_classification_models.joblib')
+    st.success("All classification models loaded successfully.")
 except FileNotFoundError:
-    st.error(f"Error: '{combined_filename}' not found. Please ensure the combined file was saved by running the cell that creates it.")
-    loaded_models = None # Set loaded_models to None if the file is not found
-    all_kfold_results = {} # Ensure kfold_results is empty if file is not found
-except Exception as e:
-     st.error(f"An unexpected error occurred while loading data from '{combined_filename}': {e}")
-     loaded_models = None
-     all_kfold_results = {}
+    st.error("Error: 'all_classification_models.joblib' not found. Please ensure the models are saved.")
+    loaded_models = None # Set to None to prevent errors if the file is not found
 
 
 # Define the features to be used for prediction (ensure this matches what the models were trained on)
-# These features should ideally be obtained from the loaded models/pipelines
-# For now, keeping it hardcoded based on previous steps
 deployment_features = ['Age', 'Height', 'Weight', 'FCVC', 'NCP']
 
 # Load the original data to fit the preprocessor correctly from CSV
@@ -87,169 +65,64 @@ if df is not None:
     X_test_processed_eval = preprocessor_deploy.transform(X_test_eval)
     y_test_eval = y_test_eval # Keep the original test labels
 
-    # Calculate performance metrics for all loaded models on the single test set (for app demo)
-    # and prepare data for the performance table using loaded K-Fold results
+    # Calculate performance metrics for all loaded models on the test set
     model_performance_data = []
     if loaded_models:
         for name, model in loaded_models.items():
             try:
                 # For SVC, ensure probability=True is set if not already
-                # Note: This refitting is done here because the loaded models were pipelines fitted on the full data
-                # If they were just classifiers, they would need retraining or setting probability=True separately.
-                # Assuming loaded models are pipelines with classifiers that support probability or can be set.
-                # For simplicity, we assume the loaded pipeline's classifier is ready for prediction.
-                classifier_step = model.named_steps.get('classifier') if isinstance(model, Pipeline) else model # Get classifier if it's a pipeline
-                if isinstance(classifier_step, SVC) and not hasattr(classifier_step, 'predict_proba'):
-                    # This case is less likely if the saved pipeline had probability=True during training
-                    # If the loaded model needs probability set, you might need to refit or ensure it was saved correctly
-                    pass # Assume the loaded pipeline is ready for prediction
+                if isinstance(model, SVC) and not hasattr(model, 'predict_proba'):
+                     model.probability = True
+                     # Refit the model to enable probabilities (this might take time)
+                     # Fit on the transformed training data used for evaluation
+                     model.fit(preprocessor_deploy.transform(X_train_eval), y_train_eval)
 
 
-                # Calculate metrics on the single test split (for demonstration in the app)
-                # Predict using the loaded model (which is a pipeline if saved as such)
-                y_pred_eval = model.predict(X_test_eval) # Predict using original X_test_eval with the pipeline
-
-                accuracy_single = accuracy_score(y_test_eval, y_pred_eval)
-                precision_single = precision_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
-                recall_single = recall_score(y_test_eval, y_test_eval, average='macro', zero_division=0) # Fixed typo y_pred_eval
-                f1_single = f1_score(y_test_eval, y_pred_eval, average='macro', zero_division=0) # Fixed typo y_test_eval
-
-
-                # Prepare data row for the table
-                row_data = {
+                y_pred_eval = model.predict(X_test_processed_eval)
+                accuracy = accuracy_score(y_test_eval, y_pred_eval)
+                precision = precision_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
+                recall = recall_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
+                f1 = f1_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
+                model_performance_data.append({
                     'Model': name,
-                    'Accuracy (Test)': accuracy_single,
-                    'Precision (Test)': precision_single,
-                    'Recall (Test)': recall_single,
-                    'F1 Score (Test)': f1_single,
-                }
-
-                # Add K-Fold results if loaded for this model
-                if name in all_kfold_results:
-                    kfold_res = all_kfold_results[name]
-                    row_data['Accuracy (K-Fold Avg)'] = kfold_res.get('Avg Accuracy')
-                    row_data['Accuracy (K-Fold Std)'] = kfold_res.get('Std Accuracy')
-                    row_data['Precision (K-Fold Avg)'] = kfold_res.get('Avg Precision')
-                    row_data['Precision (K-Fold Std)'] = kfold_res.get('Std Precision')
-                    row_data['Recall (K-Fold Avg)'] = kfold_res.get('Avg Recall')
-                    row_data['Recall (K-Fold Std)'] = kfold_res.get('Std Recall')
-                    row_data['F1 Score (K-Fold Avg)'] = kfold_res.get('Avg F1 Score')
-                    row_data['F1 Score (K-Fold Std)'] = kfold_res.get('Std F1 Score')
-
-                model_performance_data.append(row_data)
-
+                    'Accuracy': accuracy,
+                    'Precision': precision,
+                    'Recall': recall,
+                    'F1 Score': f1
+                })
             except Exception as e:
                 st.warning(f"Could not calculate performance metrics for {name}: {e}")
-
     model_performance_df = pd.DataFrame(model_performance_data)
-
-    # Format standard deviation columns and combine Avg/Std for display
-    if not model_performance_df.empty:
-        for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
-            avg_col = metric + ' (K-Fold Avg)'
-            std_col = metric + ' (K-Fold Std)'
-            combined_col_name = metric + ' (K-Fold)' # New column name
-
-            if avg_col in model_performance_df.columns and std_col in model_performance_df.columns:
-                # Combine Avg and Std, handling potential NaN values
-                model_performance_df[combined_col_name] = model_performance_df.apply(
-                    lambda row: f"{row[avg_col]:.4f} &plusmn; {row[std_col]:.4f}" if pd.notna(row[avg_col]) and pd.notna(row[std_col]) else "",
-                    axis=1
-                )
-                # Drop the separate Avg and Std columns after combining
-                model_performance_df = model_performance_df.drop(columns=[avg_col, std_col])
-            elif avg_col in model_performance_df.columns:
-                 # If only Avg is available
-                 model_performance_df[combined_col_name] = model_performance_df[avg_col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
-                 model_performance_df = model_performance_df.drop(columns=[avg_col])
-            elif std_col in model_performance_df.columns:
-                 # If only Std is available (unlikely but for completeness)
-                 model_performance_df[combined_col_name] = model_performance_df[std_col].apply(lambda x: f"&plusmn; {x:.4f}" if pd.notna(x) else "")
-                 model_performance_df = model_performance_df.drop(columns=[std_col])
 
 
 # Streamlit App Title
 st.title("Obesity Level Prediction Report")
 
-# Check if models and data are loaded before proceeding
 if loaded_models is not None and df is not None:
 
     # Model Performance Comparison (Table and Line Chart)
     st.header("1. Model Performance Comparison")
 
     if not model_performance_df.empty:
-        st.subheader("1.1 Model Performance Table") # Removed "(on Test Set)" as it now includes K-Fold
-        # Reorder columns for better display: Model, Test metrics, K-Fold metrics
-        col_order = ['Model']
-        test_cols = [col for col in model_performance_df.columns if '(Test)' in col]
-        kfold_cols = [col for col in model_performance_df.columns if '(K-Fold)' in col]
-
-        col_order.extend(test_cols)
-        # Sort K-Fold columns to group metrics
-        kfold_cols_sorted = []
-        for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
-             kfold_cols_sorted.extend([col for col in kfold_cols if col.startswith(metric)])
-
-        col_order.extend(kfold_cols_sorted)
-
-        # Ensure all columns are included, in case there are others
-        final_cols = col_order + [col for col in model_performance_df.columns if col not in col_order]
-
-        # Select and display columns, avoiding highlighting formatted strings
-        cols_to_highlight = [col for col in model_performance_df.columns if '(Test)' in col]
-
-
-        st.dataframe(
-            model_performance_df[final_cols].style.highlight_max(
-                subset=cols_to_highlight, # Highlight only the numerical columns from Test set
-                axis=0,
-                color='lightgreen'
-            ),
-            use_container_width=True
-        )
-
+        st.subheader("1.1 Model Performance Table (on Test Set)")
+        st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
         # Accuracy Over Models Line Chart
-        # The line chart is best suited for single-value comparisons, so we'll use the Test or Avg K-Fold if available
-        chart_data = model_performance_df.copy()
-        # Use Avg K-Fold (numerical part) if available, otherwise use Test
-        for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
-             combined_kfold_col = metric + ' (K-Fold)'
-             test_col = metric + ' (Test)'
-             if combined_kfold_col in chart_data.columns:
-                 # Extract numerical value from formatted string for chart
-                 chart_data[metric] = chart_data[combined_kfold_col].apply(lambda x: float(x.split('&plusmn;')[0].strip()) if isinstance(x, str) and '&plusmn;' in x else None) # Use None for missing/unformatted
-                 chart_data = chart_data.drop(columns=[combined_kfold_col])
-             elif test_col in chart_data.columns:
-                 chart_data[metric] = chart_data[test_col]
-                 chart_data = chart_data.drop(columns=[test_col])
-             else:
-                 # If neither K-Fold nor Test is available, drop the metric column from chart_data
-                 chart_data = chart_data.drop(columns=[metric])
-
-
-        if not chart_data.empty and len([col for col in ['Accuracy', 'Precision', 'Recall', 'F1 Score'] if col in chart_data.columns]) > 0:
-             model_performance_melted_line = chart_data.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=[col for col in ['Accuracy', 'Precision', 'Recall', 'F1 Score'] if col in chart_data.columns])
-             fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
-             sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-             ax1.set_title('Model Performance Comparison (Line Plot)')
-             ax1.set_ylabel('Score')
-             ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
-             ax1.legend(title='Metric')
-             st.pyplot(fig1)
-             plt.close(fig1)
-        else:
-             st.info("Not enough data available to generate the performance line chart.")
+        model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
+        fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
+        sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+        ax1.set_title('Model Performance Comparison (Line Plot)')
+        ax1.set_ylabel('Score')
+        ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+        ax1.legend(title='Metric')
+        st.pyplot(fig1)
+        plt.close(fig1)
 
 
     # Model Selection using Radio Buttons
     st.header("2. Model Selection")
-    models_to_choose = list(loaded_models.keys()) if loaded_models else []
-    if models_to_choose:
-        selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
-    else:
-        st.warning("No models loaded for selection.")
-        selected_model_name = None
+    models_to_choose = list(loaded_models.keys())
+    selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
 
 
     st.header("3. User Input Data") # Changed section header
@@ -322,8 +195,7 @@ if loaded_models is not None and df is not None:
 
         st.header("4. Prediction Results")
 
-        # Check if a model is selected and data is processed before predicting
-        if selected_model_name and input_data_processed is not None:
+        if input_data_processed is not None:
             # Get the selected model
             if selected_model_name in loaded_models:
                 model = loaded_models[selected_model_name]
@@ -346,18 +218,13 @@ if loaded_models is not None and df is not None:
 
 
                 # Add a pie chart for risk distribution (using predict_proba if available)
-                # Check if the loaded model (which is a pipeline) has a classifier step that supports predict_proba
-                classifier_step_for_proba = model.named_steps.get('classifier') if isinstance(model, Pipeline) else model
-                if hasattr(classifier_step_for_proba, 'predict_proba'):
+                if hasattr(model, 'predict_proba'):
                     st.subheader("Risk Distribution by Obesity Level:")
                     # Get the probability distribution for the prediction
-                    # Use the pipeline to predict probabilities on the original input_df[deployment_features]
-                    # The pipeline will handle preprocessing internally for prediction
-                    probabilities = model.predict_proba(input_df[deployment_features])[0]
+                    probabilities = model.predict_proba(input_data_processed)[0]
 
-
-                    # Get the class labels from the classifier step
-                    class_labels = classifier_step_for_proba.classes_
+                    # Get the class labels
+                    class_labels = model.classes_
 
                     # Create a pandas Series for easy plotting
                     risk_distribution = pd.Series(probabilities, index=class_labels)
@@ -382,17 +249,13 @@ if loaded_models is not None and df is not None:
                 # Get feature names directly from deployment_features since they are numerical
                 feature_names = deployment_features
 
-                # Get the classifier step from the loaded pipeline for checking importances/coefficients
-                classifier_for_importance = model.named_steps.get('classifier') if isinstance(model, Pipeline) else model
+                # Add explicit check for SVM kernel
+                is_svm = isinstance(model, SVC)
+                svm_is_linear = is_svm and model.kernel == 'linear'
 
-                # Add explicit check for SVM kernel if the classifier step is an SVC
-                is_svm = isinstance(classifier_for_importance, SVC)
-                svm_is_linear = is_svm and classifier_for_importance.kernel == 'linear'
-
-
-                if hasattr(classifier_for_importance, 'feature_importances_'): # Use classifier step
+                if hasattr(model, 'feature_importances_'): # Use 'model' which is the selected model
                     st.subheader(f"Feature Importances ({selected_model_name})") # Specific title for importance
-                    importances = classifier_for_importance.feature_importances_ # Use the classifier step's importances
+                    importances = model.feature_importances_ # Use the selected model's importances
                     if len(importances) == len(feature_names):
                         feat_importances = pd.Series(importances, index=feature_names)
                         feat_importances = feat_importances.sort_values(ascending=False)
@@ -407,10 +270,10 @@ if loaded_models is not None and df is not None:
                     else:
                         st.warning(f"Could not match feature importances to feature names. Number of importances ({len(importances)}) and feature names ({len(feature_names)}) do not match.")
 
-                elif hasattr(classifier_for_importance, 'coef_') and svm_is_linear: # Check classifier step AND if it's a linear SVM
+                elif hasattr(model, 'coef_') and svm_is_linear: # Check if it has coef_ AND it's a linear SVM
                      st.subheader(f"Feature Coefficients (Absolute Mean) ({selected_model_name})") # Specific title for coefficients
                      # For multi-class, coef_ is shape (n_classes, n_features). Take the mean of absolute values.
-                     coef_values = np.abs(classifier_for_importance.coef_).mean(axis=0) # Use the classifier step's coefficients
+                     coef_values = np.abs(model.coef_).mean(axis=0) # Use the selected model's coefficients
 
                      if len(coef_values) == len(feature_names):
                          feat_coef = pd.Series(coef_values, index=feature_names)
@@ -426,27 +289,31 @@ if loaded_models is not None and df is not None:
                      else:
                          st.warning(f"Could not match feature coefficients to feature names. Number of coefficients ({len(coef_values)}) and feature names ({len(feature_names)}) do not match.")
                 elif is_svm and not svm_is_linear:
-                     st.info(f"The selected SVM model uses a non-linear kernel ({classifier_for_importance.kernel}) and therefore does not have coefficients to display feature relevance directly.")
+                     st.info(f"The selected SVM model uses a non-linear kernel ({model.kernel}) and therefore does not have coefficients to display feature relevance.")
                      # Add Permutation Importance chart for non-linear SVM
                      st.subheader(f"Permutation Importance ({selected_model_name})")
                      try:
                         # Calculate permutation importance on the test set
-                        # Use the full pipeline (model) and the original X_test_eval
-                        # The pipeline handles preprocessing internally for permutation_importance
-                        result = permutation_importance(model, X_test_eval, y_test_eval, n_repeats=10, random_state=42, n_jobs=-1)
+                        # Use the preprocessor and model within a pipeline for consistent transformation
+                        # Create a temporary pipeline for permutation importance calculation
+                        perm_pipeline = Pipeline(steps=[('preprocessor', preprocessor_deploy),
+                                                        ('classifier', model)])
+
+                        # Permutation importance requires a fitted model and data
+                        # Make sure the model is fitted (should be if loaded successfully)
+                        # Use the preprocessed test set for permutation importance calculation
+                        result = permutation_importance(perm_pipeline, X_test_eval, y_test_eval, n_repeats=10, random_state=42, n_jobs=-1)
 
                         # Get the importance scores and sort them
                         sorted_importances_idx = result.importances_mean.argsort()
                         sorted_importances = result.importances_mean[sorted_importances_idx]
-                        # Use the original deployment_features names for the plot labels
                         sorted_feature_names = [deployment_features[i] for i in sorted_importances_idx]
-
 
                         # Create the bar chart
                         fig_perm, ax_perm = plt.subplots(figsize=(8, 6))
                         ax_perm.barh(sorted_feature_names, sorted_importances)
                         ax_perm.set_title(f"Permutation Importance ({selected_model_name})")
-                        ax_perm.set_xlabel("Mean Decrease in Accuracy") # Or other metric if specified
+                        ax_perm.set_xlabel("Mean Decrease in Accuracy")
                         st.pyplot(fig_perm)
                         plt.close(fig_perm)
 
@@ -455,9 +322,7 @@ if loaded_models is not None and df is not None:
 
                 else:
                     st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
-            else:
-                 st.warning(f"Selected model '{selected_model_name}' not found in loaded models.")
 
 
 else:
-    st.warning("Models or data not loaded. Please ensure 'all_results_and_models.joblib' and 'ObesityDataSet.csv' are in the correct directory and the necessary training cells were run.")
+    st.warning("Model or data not loaded. Please ensure 'all_k-fold_models.joblib' and 'ObesityDataSet.csv' are in the correct directory.")
