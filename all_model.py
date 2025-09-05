@@ -41,16 +41,18 @@ if df is not None:
     )
 
     # Identify categorical and numerical columns based on the deployment features
+    # With the current deployment_features, there are no categorical columns.
     categorical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype == 'object']
     numerical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype != 'object']
 
     numerical_transformer_deploy = StandardScaler()
-    categorical_transformer_deploy = OneHotEncoder(handle_unknown='ignore', drop='first')
+    # categorical_transformer_deploy = OneHotEncoder(handle_unknown='ignore', drop='first') # No categorical features for these models
 
+    # Simplify the preprocessor since only numerical features are used
     preprocessor_deploy = ColumnTransformer(
         transformers=[
-            ('num', numerical_transformer_deploy, numerical_cols_for_preprocessor),
-            ('cat', categorical_transformer_deploy, categorical_cols_for_preprocessor)
+            ('num', numerical_transformer_deploy, numerical_cols_for_preprocessor)
+            # Removed 'cat' transformer as there are no categorical features in deployment_features
         ],
         remainder='passthrough'
     )
@@ -132,26 +134,18 @@ if loaded_models is not None and df is not None:
     col_age, col_height, col_weight = st.columns(3)
     with col_age:
         col = 'Age'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
+        # Check if the column is in deployment_features before creating the input
+        if col in deployment_features:
              input_data[col] = st.number_input(f"{col} (years):", value=0, min_value=0, help="Enter age in years") # Updated label and help
 
     with col_height:
         col = 'Height'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
+        if col in deployment_features:
             input_data[col] = st.number_input(f"{col} (m):", value=0.0, min_value=0.0, help="Enter height in meters") # Updated label and help
 
     with col_weight:
         col = 'Weight'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
+        if col in deployment_features:
             input_data[col] = st.number_input(f"{col} (kg):", value=0.0, min_value=0.0, help="Enter weight in kilograms") # Updated label and help
 
     # Create columns for FCVC and NCP
@@ -159,30 +153,27 @@ if loaded_models is not None and df is not None:
 
     with col_fcvc:
         col = 'FCVC'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col == 'FCVC': # Handle FCVC separately with selectbox
+        if col in deployment_features:
              selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
              input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
 
     with col_ncp:
         col = 'NCP'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col == 'NCP': # Handle NCP with radio button input
+        if col in deployment_features:
+             # Changed to radio button input
              input_data[col] = st.radio("Number of main meals per day:", options=[1.0, 2.0, 3.0, 4.0])
 
 
     # Handle any remaining deployment features that were not explicitly placed in columns
     remaining_features = [col for col in deployment_features if col not in ['Age', 'Height', 'Weight', 'FCVC', 'NCP']]
     for col in remaining_features:
-         if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-         elif col in numerical_cols_for_preprocessor:
-            input_data[col] = st.number_input(f"{col}:", value=0.0, min_value=0.0) # Assuming remaining numerical features should also be non-negative
+         # Check if the column is in deployment_features before creating the input
+         if col in deployment_features:
+             if col in categorical_cols_for_preprocessor:
+                options = list(df[col].unique())
+                input_data[col] = st.selectbox(f"{col}:", options)
+             elif col in numerical_cols_for_preprocessor:
+                input_data[col] = st.number_input(f"{col}:", value=0.0, min_value=0.0) # Assuming remaining numerical features should also be non-negative
 
 
     # Predict (with submit button)
@@ -191,87 +182,71 @@ if loaded_models is not None and df is not None:
         input_df = pd.DataFrame([input_data])
 
         # Preprocess the input data using the fitted preprocessor
-        input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
+        # Ensure the input DataFrame has the same columns as the training data used for the preprocessor
+        # This might require adding missing columns with default values (e.g., 0 for one-hot encoded)
+        # For simplicity with current numerical-only features, we can proceed directly
+        try:
+            input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
+        except ValueError as e:
+             st.error(f"Error during preprocessing: {e}. Please check if all required features are provided.")
+             input_data_processed = None # Set to None to prevent further errors
+
 
         st.header("4. Prediction Results")
 
-        # Get the selected model
-        if selected_model_name in loaded_models:
-            model = loaded_models[selected_model_name]
-            # Make prediction
-            prediction = model.predict(input_data_processed)
+        if input_data_processed is not None:
+            # Get the selected model
+            if selected_model_name in loaded_models:
+                model = loaded_models[selected_model_name]
+                # Make prediction
+                prediction = model.predict(input_data_processed)
 
-            st.subheader(f"Prediction using {selected_model_name}:")
-            st.write(f"Predicted Obesity Level: **{prediction[0]}**")
+                st.subheader(f"Prediction using {selected_model_name}:")
+                st.write(f"Predicted Obesity Level: **{prediction[0]}**")
 
-            # Add a simple interpretation based on the prediction
-            st.subheader("Interpretation:")
-            if 'Obesity' in prediction[0]:
-                st.write("Based on the provided data and the selected model, the predicted obesity level falls into an 'Obesity' category. This indicates a higher risk of health issues associated with obesity.")
-            elif 'Overweight' in prediction[0]:
-                st.write("Based on the provided data and the selected model, the predicted obesity level falls into an 'Overweight' category. This suggests you are at risk of developing obesity.")
-            elif 'Normal_Weight' in prediction[0]:
-                st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Normal Weight' category. This suggests you are currently maintaining a healthy weight.")
-            elif 'Insufficient_Weight' in prediction[0]:
-                st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
-
-
-            # Add a pie chart for risk distribution (using predict_proba if available)
-            if hasattr(model, 'predict_proba'):
-                st.subheader("Risk Distribution by Obesity Level:")
-                # Get the probability distribution for the prediction
-                probabilities = model.predict_proba(input_data_processed)[0]
-
-                # Get the class labels
-                class_labels = model.classes_
-
-                # Create a pandas Series for easy plotting
-                risk_distribution = pd.Series(probabilities, index=class_labels)
-
-                # # Filter for the desired classes - Removed this line to include all classes
-                # target_classes = ['Insufficient_Weight', 'Normal_Weight', 'Obesity_Type_I', 'Obesity_Type_II', 'Obesity_Type_III']
-                # risk_distribution_filtered = risk_distribution[risk_distribution.index.isin(target_classes)]
-
-                # Plot the pie chart
-                fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
-                risk_distribution.plot.pie(autopct='%1.1f%%', startangle=90, ax=ax_pie)
-                ax_pie.set_title('Risk Distribution for Obesity Levels')
-                ax_pie.set_ylabel('') # Remove the default y-label
-                st.pyplot(fig_pie)
-                plt.close(fig_pie)
-            else:
-                st.info("The selected model does not support probability prediction (predict_proba) for the pie chart.")
-
-            # Add Feature Importance chart below prediction results
-            st.subheader(f"Feature Importance ({selected_model_name})")
-
-            # Get feature names after preprocessing
-            try:
-                feature_names = []
-                for name, transformer, cols in preprocessor_deploy.transformers_:
-                    if transformer != 'passthrough': # Check if the transformer is not 'passthrough'
-                        if hasattr(transformer, 'get_feature_names_out'):
-                            if isinstance(cols, str): # Handle single column case
-                                feature_names.extend(transformer.get_feature_names_out([cols]))
-                            else: # Handle multiple columns
-                                feature_names.extend(transformer.get_feature_names_out(cols))
-                        # Handle cases where the transformer is fitted but doesn't have get_feature_names_out
-                        # This might require inspecting the transformer type (e.g., StandardScaler)
-                        elif hasattr(transformer, 'n_features_in_'): # For transformers like StandardScaler
-                            if isinstance(cols, str):
-                                feature_names.append(cols)
-                            else:
-                                feature_names.extend(cols)
-                    else: # Handle 'passthrough'
-                        if isinstance(cols, str):
-                            feature_names.append(cols)
-                        else:
-                            feature_names.extend(cols)
+                # Add a simple interpretation based on the prediction
+                st.subheader("Interpretation:")
+                if 'Obesity' in prediction[0]:
+                    st.write("Based on the provided data and the selected model, the predicted obesity level falls into an 'Obesity' category. This indicates a higher risk of health issues associated with obesity.")
+                elif 'Overweight' in prediction[0]:
+                    st.write("Based on the provided data and the selected model, the predicted obesity level falls into an 'Overweight' category. This suggests you are at risk of developing obesity.")
+                elif 'Normal_Weight' in prediction[0]:
+                    st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Normal Weight' category. This suggests you are currently maintaining a healthy weight.")
+                elif 'Insufficient_Weight' in prediction[0]:
+                    st.write("Based on the provided data and the selected model, the predicted obesity level falls into the 'Insufficient Weight' category. This suggests you are underweight, which can also lead to health concerns.")
 
 
-                # Ensure feature names are unique and in a consistent order
-                feature_names = list(dict.fromkeys(feature_names))
-                # You might need to sort feature_names based on how the preprocessor orders output if order is critical
+                # Add a pie chart for risk distribution (using predict_proba if available)
+                if hasattr(model, 'predict_proba'):
+                    st.subheader("Risk Distribution by Obesity Level:")
+                    # Get the probability distribution for the prediction
+                    probabilities = model.predict_proba(input_data_processed)[0]
+
+                    # Get the class labels
+                    class_labels = model.classes_
+
+                    # Create a pandas Series for easy plotting
+                    risk_distribution = pd.Series(probabilities, index=class_labels)
+
+                    # # Filter for the desired classes - Removed this line to include all classes
+                    # target_classes = ['Insufficient_Weight', 'Normal_Weight', 'Obesity_Type_I', 'Obesity_Type_II', 'Obesity_Type_III']
+                    # risk_distribution_filtered = risk_distribution[risk_distribution.index.isin(target_classes)]
+
+                    # Plot the pie chart
+                    fig_pie, ax_pie = plt.subplots(figsize=(8, 8))
+                    risk_distribution.plot.pie(autopct='%1.1f%%', startangle=90, ax=ax_pie)
+                    ax_pie.set_title('Risk Distribution for Obesity Levels')
+                    ax_pie.set_ylabel('') # Remove the default y-label
+                    st.pyplot(fig_pie)
+                    plt.close(fig_pie)
+                else:
+                    st.info("The selected model does not support probability prediction (predict_proba) for the pie chart.")
+
+                # Add Feature Importance chart below prediction results
+                st.subheader(f"Feature Importance ({selected_model_name})")
+
+                # Get feature names directly from deployment_features since they are numerical
+                feature_names = deployment_features
 
                 if hasattr(model, 'feature_importances_'): # Use 'model' which is the selected model
                     importances = model.feature_importances_ # Use the selected model's importances
@@ -291,6 +266,7 @@ if loaded_models is not None and df is not None:
 
                 elif hasattr(model, 'coef_'): # Use 'model' which is the selected model
                      st.subheader(f"Feature Coefficients ({selected_model_name})") # Updated title and model name
+                     # For multi-class, coef_ is shape (n_classes, n_features). Take the mean of absolute values.
                      coef_values = np.abs(model.coef_).mean(axis=0) # Use the selected model's coefficients
 
                      if len(coef_values) == len(feature_names):
@@ -307,8 +283,8 @@ if loaded_models is not None and df is not None:
                      else:
                          st.warning(f"Could not match feature coefficients to feature names. Number of coefficients ({len(coef_values)}) and feature names ({len(feature_names)}) do not match.")
 
-            except Exception as e:
-                st.error(f"An error occurred while generating Feature Importance chart: {e}")
+            else:
+                st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
 
 
 else:
