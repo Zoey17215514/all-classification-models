@@ -20,7 +20,7 @@ except FileNotFoundError:
 
 
 # Define the features to be used for prediction (ensure this matches what the models were trained on)
-deployment_features = ['Gender', 'Weight', 'Height', 'FCVC', 'Age']
+deployment_features = ['Age', 'Height', 'Weight', 'FCVC', 'NCP']
 
 # Load the original data to fit the preprocessor correctly from CSV
 try:
@@ -34,6 +34,7 @@ except FileNotFoundError:
 # Create preprocessing pipelines for numerical and categorical features
 # This needs to be fitted on the training data
 if df is not None:
+    # Identify categorical and numerical columns based on the deployment features
     categorical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype == 'object']
     numerical_cols_for_preprocessor = [col for col in deployment_features if col in df.columns and df[col].dtype != 'object']
 
@@ -115,7 +116,7 @@ if loaded_models is not None and df is not None:
             elif col == 'Height':
                  input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
             elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col} (years):", value=0.0, help="Enter age in years") # Updated label and help
+                 input_data[col] = st.number_input(f"{col} (years):", value=0, help="Enter age in years") # Updated label and help
             else:
                 input_data[col] = st.number_input(f"{col}:", value=0.0)
 
@@ -156,8 +157,7 @@ if loaded_models is not None and df is not None:
 
 
     # Feature Importance (Horizontal Bar Chart)
-    selected_model = loaded_models[selected_model_name]
-    if hasattr(selected_model, 'feature_importances_'):
+    if hasattr(model, 'feature_importances_'):
         st.subheader(f"3.2 Feature Importance ({selected_model_name})")
         # Get feature names after preprocessing
         try:
@@ -178,7 +178,7 @@ if loaded_models is not None and df is not None:
                  feature_names.extend(remaining_cols)
 
 
-            importances = selected_model.feature_importances_
+            importances = model.feature_importances_
             if len(importances) == len(feature_names):
                 feat_importances = pd.Series(importances, index=feature_names)
                 feat_importances = feat_importances.sort_values(ascending=False)
@@ -196,7 +196,7 @@ if loaded_models is not None and df is not None:
         except Exception as e:
             st.error(f"An error occurred while generating Feature Importance chart: {e}")
 
-    elif hasattr(selected_model, 'coef_'):
+    elif hasattr(model, 'coef_'):
          st.subheader(f"3.2 Feature Coefficients ({selected_model_name})")
          try:
             feature_names = []
@@ -215,7 +215,7 @@ if loaded_models is not None and df is not None:
                  remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
                  feature_names.extend(remaining_cols)
 
-            coef_values = np.abs(selected_model.coef_).mean(axis=0)
+            coef_values = np.abs(model.coef_).mean(axis=0)
 
             if len(coef_values) == len(feature_names):
                  feat_coef = pd.Series(coef_values, index=feature_names)
