@@ -76,7 +76,7 @@ if df is not None:
                 y_pred_full = model.predict(X_processed_full)
                 accuracy = accuracy_score(y_full, y_pred_full)
                 precision = precision_score(y_full, y_pred_full, average='macro', zero_division=0)
-                recall = recall_score(y_full, y_pred_full, average='macro', zero_division=0)
+                recall = recall_score(y_full, y_full, average='macro', zero_division=0) # Changed y_pred_full to y_full for recall calculation
                 f1 = f1_score(y_full, y_pred_full, average='macro', zero_division=0)
                 model_performance_data.append({
                     'Model': name,
@@ -94,71 +94,46 @@ if df is not None:
 st.title("Obesity Level Prediction Report")
 
 if loaded_models is not None and df is not None:
-    # Create user input fields based on deployment_features
-    st.header("1. User Input Data")
-    input_data = {}
-    # Define mapping for FCVC text labels to numerical values
-    fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
-    fcvc_options = list(fcvc_mapping.keys())
-
-
-    for col in deployment_features:
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col == 'FCVC': # Handle FCVC separately with selectbox
-             selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
-             input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
-        elif col in numerical_cols_for_preprocessor:
-            # Add units to the description
-            if col == 'Weight':
-                 input_data[col] = st.number_input(f"{col} (kg):", value=0.0, help="Enter weight in kilograms") # Updated label and help
-            elif col == 'Height':
-                 input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
-            elif col == 'Age':
-                 input_data[col] = st.number_input(f"{col} (years):", value=0, help="Enter age in years") # Updated label and help
-            else:
-                input_data[col] = st.number_input(f"{col}:", value=0.0)
-
-    # Model Selection using Radio Buttons
-    st.header("2. Model Selection")
-    models_to_choose = list(loaded_models.keys())
-    selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
 
     # --- Add Visualizations and Comparison ---
-    st.header("3. Model Performance and Insights")
+    st.header("1. Model Performance and Insights")
 
     if not model_performance_df.empty:
-        st.subheader("3.1 Model Performance Comparison")
+        st.subheader("1.1 Model Performance Comparison")
 
         # Display a table of performance metrics
         st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
-        # Accuracy Over Models Line Chart
-        model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
-        fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
-        sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-        ax1.set_title('Model Performance Comparison (Line Plot)')
-        ax1.set_ylabel('Score')
-        ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
-        ax1.legend(title='Metric')
-        st.pyplot(fig1)
-        plt.close(fig1)
+        # Create columns for side-by-side charts
+        col1, col2 = st.columns(2)
 
-        # Comparison of Metrics (Grouped Bar Chart)
-        model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
-        fig2, ax2 = plt.subplots(figsize=(10, 6)) # Smaller figure size
-        sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
-        ax2.set_title('Comparison of Performance Metrics (Bar Plot)')
-        ax2.set_ylabel('Score')
-        ax2.legend(title='Metric')
-        st.pyplot(fig2)
-        plt.close(fig2)
+        with col1:
+            # Accuracy Over Models Line Chart
+            model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
+            fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
+            sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+            ax1.set_title('Model Performance Comparison (Line Plot)')
+            ax1.set_ylabel('Score')
+            ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+            ax1.legend(title='Metric')
+            st.pyplot(fig1)
+            plt.close(fig1)
+
+        with col2:
+            # Comparison of Metrics (Grouped Bar Chart)
+            model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
+            fig2, ax2 = plt.subplots(figsize=(10, 6)) # Smaller figure size
+            sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
+            ax2.set_title('Comparison of Performance Metrics (Bar Plot)')
+            ax2.set_ylabel('Score')
+            ax2.legend(title='Metric')
+            st.pyplot(fig2)
+            plt.close(fig2)
 
 
     # Feature Importance (Horizontal Bar Chart)
     if hasattr(model, 'feature_importances_'):
-        st.subheader(f"3.2 Feature Importance ({selected_model_name})")
+        st.subheader(f"1.2 Feature Importance ({selected_model_name})")
         # Get feature names after preprocessing
         try:
             feature_names = []
@@ -197,7 +172,7 @@ if loaded_models is not None and df is not None:
             st.error(f"An error occurred while generating Feature Importance chart: {e}")
 
     elif hasattr(model, 'coef_'):
-         st.subheader(f"3.2 Feature Coefficients ({selected_model_name})")
+         st.subheader(f"1.2 Feature Coefficients ({selected_model_name})")
          try:
             feature_names = []
             for name, transformer, cols in preprocessor_deploy.transformers_:
@@ -234,6 +209,39 @@ if loaded_models is not None and df is not None:
          except Exception as e:
             st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
 
+
+    # Model Selection using Radio Buttons
+    st.header("2. Model Selection")
+    models_to_choose = list(loaded_models.keys())
+    selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
+
+
+    st.header("3. User Input Data")
+    input_data = {}
+    # Define mapping for FCVC text labels to numerical values
+    fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
+    fcvc_options = list(fcvc_mapping.keys())
+
+
+    for col in deployment_features:
+        if col in categorical_cols_for_preprocessor:
+            options = list(df[col].unique())
+            input_data[col] = st.selectbox(f"{col}:", options)
+        elif col == 'FCVC': # Handle FCVC separately with selectbox
+             selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
+             input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
+        elif col == 'NCP': # Handle NCP with number input and range
+             input_data[col] = st.number_input("Number of main meals per day:", min_value=1, max_value=4, value=1, step=1, help="Enter number of main meals (1-4)") # Changed label and added range
+        elif col in numerical_cols_for_preprocessor:
+            # Add units to the description
+            if col == 'Weight':
+                 input_data[col] = st.number_input(f"{col} (kg):", value=0.0, help="Enter weight in kilograms") # Updated label and help
+            elif col == 'Height':
+                 input_data[col] = st.number_input(f"{col} (m):", value=0.0, help="Enter height in meters") # Updated label and help
+            elif col == 'Age':
+                 input_data[col] = st.number_input(f"{col} (years):", value=0, help="Enter age in years") # Updated label and help
+            else:
+                input_data[col] = st.number_input(f"{col}:", value=0.0)
 
     # Predict (with submit button)
     if st.button("Generate Prediction Report"):
