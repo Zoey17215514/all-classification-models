@@ -243,12 +243,17 @@ if loaded_models is not None and df is not None:
                     st.info("The selected model does not support probability prediction (predict_proba) for the pie chart.")
 
                 # Add Feature Importance chart below prediction results
-                st.subheader(f"Feature Importance ({selected_model_name})")
+                st.subheader(f"Feature Relevance ({selected_model_name})") # Changed title to be more general
 
                 # Get feature names directly from deployment_features since they are numerical
                 feature_names = deployment_features
 
+                # Add explicit check for SVM kernel
+                is_svm = isinstance(model, SVC)
+                svm_is_linear = is_svm and model.kernel == 'linear'
+
                 if hasattr(model, 'feature_importances_'): # Use 'model' which is the selected model
+                    st.subheader(f"Feature Importances ({selected_model_name})") # Specific title for importance
                     importances = model.feature_importances_ # Use the selected model's importances
                     if len(importances) == len(feature_names):
                         feat_importances = pd.Series(importances, index=feature_names)
@@ -264,8 +269,8 @@ if loaded_models is not None and df is not None:
                     else:
                         st.warning(f"Could not match feature importances to feature names. Number of importances ({len(importances)}) and feature names ({len(feature_names)}) do not match.")
 
-                elif hasattr(model, 'coef_'): # Use 'model' which is the selected model
-                     st.subheader(f"Feature Coefficients ({selected_model_name})") # Updated title and model name
+                elif hasattr(model, 'coef_') and svm_is_linear: # Check if it has coef_ AND it's a linear SVM
+                     st.subheader(f"Feature Coefficients (Absolute Mean) ({selected_model_name})") # Specific title for coefficients
                      # For multi-class, coef_ is shape (n_classes, n_features). Take the mean of absolute values.
                      coef_values = np.abs(model.coef_).mean(axis=0) # Use the selected model's coefficients
 
@@ -282,9 +287,10 @@ if loaded_models is not None and df is not None:
                          plt.close(fig_coef)
                      else:
                          st.warning(f"Could not match feature coefficients to feature names. Number of coefficients ({len(coef_values)}) and feature names ({len(feature_names)}) do not match.")
-
-            else:
-                st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
+                elif is_svm and not svm_is_linear:
+                     st.info(f"The selected SVM model uses a non-linear kernel ({model.kernel}) and therefore does not have coefficients to display feature relevance.")
+                else:
+                    st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
 
 
 else:
