@@ -13,10 +13,10 @@ from sklearn.svm import SVC # Import SVC
 
 # Load the model
 try:
-    loaded_models = load('all_k-fold_models.joblib')
+    loaded_models = load('all_classification_models.joblib')
     st.success("All classification models loaded successfully.")
 except FileNotFoundError:
-    st.error("Error: 'all_k-fold_models.joblib' not found. Please ensure the models are saved.")
+    st.error("Error: 'all_classification_models.joblib' not found. Please ensure the models are saved.")
     loaded_models = None # Set to None to prevent errors if the file is not found
 
 
@@ -203,62 +203,27 @@ if loaded_models is not None and df is not None:
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
     fcvc_options = list(fcvc_mapping.keys())
 
-    # Create columns for Age, Height, and Weight
-    col_age, col_height, col_weight = st.columns(3)
-    with col_age:
-        col = 'Age'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
-             input_data[col] = st.number_input(f"{col} (years):", value=0, min_value=0, help="Enter age in years") # Updated label and help
 
-    with col_height:
-        col = 'Height'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
-            input_data[col] = st.number_input(f"{col} (m):", value=0.0, min_value=0.0, help="Enter height in meters") # Updated label and help
-
-    with col_weight:
-        col = 'Weight'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col in numerical_cols_for_preprocessor:
-            input_data[col] = st.number_input(f"{col} (kg):", value=0.0, min_value=0.0, help="Enter weight in kilograms") # Updated label and help
-
-    # Create columns for FCVC and NCP
-    col_fcvc, col_ncp = st.columns(2)
-
-    with col_fcvc:
-        col = 'FCVC'
+    for col in deployment_features:
         if col in categorical_cols_for_preprocessor:
             options = list(df[col].unique())
             input_data[col] = st.selectbox(f"{col}:", options)
         elif col == 'FCVC': # Handle FCVC separately with selectbox
              selected_fcvc_text = st.selectbox("Frequency of consumption of vegetables:", fcvc_options)
              input_data[col] = fcvc_mapping[selected_fcvc_text] # Map text to numerical value
-
-    with col_ncp:
-        col = 'NCP'
-        if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-        elif col == 'NCP': # Handle NCP with radio button input
+        elif col == 'NCP': # Handle NCP with number input and range
+             # Changed to radio button input
              input_data[col] = st.radio("Number of main meals per day:", options=[1.0, 2.0, 3.0, 4.0])
-
-
-    # Handle any remaining deployment features that were not explicitly placed in columns
-    remaining_features = [col for col in deployment_features if col not in ['Age', 'Height', 'Weight', 'FCVC', 'NCP']]
-    for col in remaining_features:
-         if col in categorical_cols_for_preprocessor:
-            options = list(df[col].unique())
-            input_data[col] = st.selectbox(f"{col}:", options)
-         elif col in numerical_cols_for_preprocessor:
-            input_data[col] = st.number_input(f"{col}:", value=0.0, min_value=0.0) # Assuming remaining numerical features should also be non-negative
-
+        elif col in numerical_cols_for_preprocessor:
+            # Add units to the description
+            if col == 'Weight':
+                 input_data[col] = st.number_input(f"{col} (kg):", value=0.0, min_value=0.0, help="Enter weight in kilograms") # Updated label and help
+            elif col == 'Height':
+                 input_data[col] = st.number_input(f"{col} (m):", value=0.0, min_value=0.0, help="Enter height in meters") # Updated label and help
+            elif col == 'Age':
+                 input_data[col] = st.number_input(f"{col} (years):", value=0, min_value=0, help="Enter age in years") # Updated label and help
+            else:
+                input_data[col] = st.number_input(f"{col}:", value=0.0)
 
     # Predict (with submit button)
     if st.button("Generate Prediction Report"):
