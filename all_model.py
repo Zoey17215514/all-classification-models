@@ -10,6 +10,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.svm import SVC # Import SVC
+from sklearn.inspection import permutation_importance # Import permutation_importance
 
 # Load the model
 try:
@@ -289,6 +290,36 @@ if loaded_models is not None and df is not None:
                          st.warning(f"Could not match feature coefficients to feature names. Number of coefficients ({len(coef_values)}) and feature names ({len(feature_names)}) do not match.")
                 elif is_svm and not svm_is_linear:
                      st.info(f"The selected SVM model uses a non-linear kernel ({model.kernel}) and therefore does not have coefficients to display feature relevance.")
+                     # Add Permutation Importance chart for non-linear SVM
+                     st.subheader(f"Permutation Importance ({selected_model_name})")
+                     try:
+                        # Calculate permutation importance on the test set
+                        # Use the preprocessor and model within a pipeline for consistent transformation
+                        # Create a temporary pipeline for permutation importance calculation
+                        perm_pipeline = Pipeline(steps=[('preprocessor', preprocessor_deploy),
+                                                        ('classifier', model)])
+
+                        # Permutation importance requires a fitted model and data
+                        # Make sure the model is fitted (should be if loaded successfully)
+                        # Use the preprocessed test set for permutation importance calculation
+                        result = permutation_importance(perm_pipeline, X_test_eval, y_test_eval, n_repeats=10, random_state=42, n_jobs=-1)
+
+                        # Get the importance scores and sort them
+                        sorted_importances_idx = result.importances_mean.argsort()
+                        sorted_importances = result.importances_mean[sorted_importances_idx]
+                        sorted_feature_names = [deployment_features[i] for i in sorted_importances_idx]
+
+                        # Create the bar chart
+                        fig_perm, ax_perm = plt.subplots(figsize=(8, 6))
+                        ax_perm.barh(sorted_feature_names, sorted_importances)
+                        ax_perm.set_title(f"Permutation Importance ({selected_model_name})")
+                        ax_perm.set_xlabel("Mean Decrease in Accuracy")
+                        st.pyplot(fig_perm)
+                        plt.close(fig_perm)
+
+                     except Exception as e:
+                         st.error(f"An error occurred while generating Permutation Importance chart: {e}")
+
                 else:
                     st.info(f"The selected model ({selected_model_name}) does not have feature importances or coefficients to display.")
 
