@@ -97,36 +97,131 @@ st.title("Obesity Level Prediction Report")
 
 if loaded_models is not None and df is not None:
 
-    # Model Selection using Radio Buttons and Performance Chart in the same row
-    st.header("1. Model Selection and Performance")
+    # Model Performance Comparison (Table and Line Chart)
+    st.header("1. Model Performance Comparison")
 
-    col_model_select, col_performance_chart = st.columns(2)
-
-    with col_model_select:
-        models_to_choose = list(loaded_models.keys())
-        selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
-
-    with col_performance_chart:
-         if not model_performance_df.empty:
-            st.subheader("Model Performance Comparison (on Test Set)")
-
-            # Comparison of Metrics (Grouped Bar Chart)
-            model_performance_melted_bar = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score')
-            fig2, ax2 = plt.subplots(figsize=(10, 6)) # Smaller figure size
-            sns.barplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_bar, ax=ax2)
-            ax2.set_title('Comparison of Performance Metrics (Bar Plot)')
-            ax2.set_ylabel('Score')
-            ax2.legend(title='Metric')
-            st.pyplot(fig2)
-            plt.close(fig2)
-
-    # Display performance table below the row with radio buttons and bar chart
     if not model_performance_df.empty:
         st.subheader("1.1 Model Performance Table (on Test Set)")
         st.dataframe(model_performance_df.set_index('Model').style.highlight_max(axis=0, color='lightgreen'), use_container_width=True)
 
+        # Accuracy Over Models Line Chart
+        model_performance_melted_line = model_performance_df.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
+        fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
+        sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+        ax1.set_title('Model Performance Comparison (Line Plot)')
+        ax1.set_ylabel('Score')
+        ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+        ax1.legend(title='Metric')
+        st.pyplot(fig1)
+        plt.close(fig1)
 
-    st.header("2. User Input Data")
+
+    # Model Selection using Radio Buttons
+    st.header("2. Model Selection")
+    models_to_choose = list(loaded_models.keys())
+    selected_model_name = st.radio("Select a Model for Prediction:", models_to_choose)
+
+
+    # Feature Importance (Horizontal Bar Chart) - Moved below Model Selection
+    st.header("2.1 Feature Importance") # New section header
+
+    # Need to select a model here to display its feature importances/coefficients
+    if loaded_models:
+        # Use the selected model for displaying feature importance/coefficients
+        model_for_importance = loaded_models[selected_model_name]
+
+        if hasattr(model_for_importance, 'feature_importances_'):
+            st.subheader(f"Feature Importance ({selected_model_name})") # Updated title and model name
+            # Get feature names after preprocessing - This part now runs after preprocessor is fitted
+            try:
+                feature_names = []
+                for name, transformer, cols in preprocessor_deploy.transformers_:
+                    if hasattr(transformer, 'get_feature_names_out'):
+                         if isinstance(cols, str): # Handle single column case
+                             feature_names.extend(transformer.get_feature_names_out([cols]))
+                         else: # Handle multiple columns
+                             feature_names.extend(transformer.get_feature_names_out(cols))
+                    elif name == 'num': # For numerical columns, the names are the original column names
+                         feature_names.extend(cols)
+                    # Handle 'passthrough' or other transformers that don't change feature names
+                    elif name != 'remainder' and hasattr(preprocessor_deploy.named_transformers_, name):
+                         # If it's a named transformer and not the remainder, assume original names if no get_feature_names_out
+                         transformer_instance = preprocessor_deploy.named_transformers_[name]
+                         if not hasattr(transformer_instance, 'get_feature_names_out'):
+                              if isinstance(cols, str):
+                                  feature_names.append(cols)
+                              else:
+                                  feature_names.extend(cols)
+
+
+                if preprocessor_deploy.remainder == 'passthrough':
+                     # Add original column names that were passed through
+                     passthrough_cols = [col for col in X_train_eval.columns if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                     feature_names.extend(passthrough_cols)
+
+                # Ensure feature names are unique and in a consistent order
+                feature_names = list(dict.fromkeys(feature_names))
+                # You might need to sort feature_names based on how the preprocessor orders output if order is critical
+
+                importances = model_for_importance.feature_importances_ # Use the selected model's importances
+                if len(importances) == len(feature_names):
+                    feat_importances = pd.Series(importances, index=feature_names)
+                    feat_importances = feat_importances.sort_values(ascending=False)
+
+                    fig4, ax4 = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                    feat_importances.plot(kind='barh', ax=ax4)
+                    ax4.set_title(f'Feature Importances ({selected_model_name})') # Updated title
+                    ax4.set_xlabel('Importance')
+                    ax4.invert_yaxis()
+                    st.pyplot(fig4)
+                    plt.close(fig4)
+                else:
+                     st.warning(f"Could not match feature importances to feature names. Number of importances ({len(importances)}) and feature names ({len(feature_names)}) do not match.")
+
+            except Exception as e:
+                st.error(f"An error occurred while generating Feature Importance chart: {e}")
+
+        elif hasattr(model_for_importance, 'coef_'):
+             st.subheader(f"Feature Coefficients ({selected_model_name})") # Updated title and model name
+             try:
+                feature_names = []
+                for name, transformer, cols in preprocessor_deploy.transformers_:
+                    if hasattr(transformer, 'get_feature_names_out'):
+                         if isinstance(cols, str):
+                             feature_names.extend(transformer.get_feature_names_out([cols]))
+                         else:
+                             feature_names.extend(transformer.get_feature_names_out(cols))
+                    elif name == 'num':
+                         feature_names.extend(cols)
+
+                if preprocessor_deploy.remainder == 'passthrough':
+                     all_input_cols = list(X_train_eval.columns) # Use training cols for consistency
+                     processed_cols = [col.split('__')[1] if '__' in col else col for col in feature_names]
+                     remaining_cols = [col for col in all_input_cols if col not in numerical_cols_for_preprocessor and col not in categorical_cols_for_preprocessor]
+                     feature_names.extend(remaining_cols)
+
+                coef_values = np.abs(model_for_importance.coef_).mean(axis=0) # Use the selected model's coefficients
+
+                if len(coef_values) == len(feature_names):
+                     feat_coef = pd.Series(coef_values, index=feature_names)
+                     feat_coef = feat_coef.sort_values(ascending=False)
+
+                     fig_coef, ax_coef = plt.subplots(figsize=(8, 6)) # Smaller figure size
+                     feat_coef.plot(kind='barh', ax=ax_coef)
+                     ax_coef.set_title(f'Feature Coefficients (Absolute Mean) ({selected_model_name})') # Updated title
+                     ax_coef.set_xlabel('Absolute Mean Coefficient Value')
+                     ax_coef.invert_yaxis()
+                     st.pyplot(fig_coef)
+                     plt.close(fig_coef)
+                else:
+                     st.warning("Could not match feature coefficients to feature names. Number of coefficients and feature names do not match.")
+
+             except Exception as e:
+                st.error(f"An error occurred while generating Feature Coefficients chart: {e}")
+
+
+
+    st.header("3. User Input Data") # Changed section header
     input_data = {}
     # Define mapping for FCVC text labels to numerical values
     fcvc_mapping = {"Never": 1.0, "Sometimes": 2.0, "Always": 3.0}
@@ -161,7 +256,7 @@ if loaded_models is not None and df is not None:
         # Preprocess the input data using the fitted preprocessor
         input_data_processed = preprocessor_deploy.transform(input_df[deployment_features])
 
-        st.header("3. Prediction Results") # Changed section header
+        st.header("4. Prediction Results")
 
         # Get the selected model
         if selected_model_name in loaded_models:
