@@ -76,7 +76,7 @@ if df is not None:
                 y_pred_full = model.predict(X_processed_full)
                 accuracy = accuracy_score(y_full, y_pred_full)
                 precision = precision_score(y_full, y_pred_full, average='macro', zero_division=0)
-                recall = recall_score(y_full, y_full, average='macro', zero_division=0) # Changed y_pred_full to y_full for recall calculation
+                recall = recall_score(y_full, y_pred_full, average='macro', zero_division=0) # Corrected recall calculation
                 f1 = f1_score(y_full, y_pred_full, average='macro', zero_division=0)
                 model_performance_data.append({
                     'Model': name,
