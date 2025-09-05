@@ -13,7 +13,7 @@ from sklearn.svm import SVC # Import SVC
 
 # Load the model
 try:
-    loaded_models = load('all_classification_models.joblib')
+    loaded_models = load('all_k-fold_models.joblib')
     st.success("All classification models loaded successfully.")
 except FileNotFoundError:
     st.error("Error: 'all_classification_models.joblib' not found. Please ensure the models are saved.")
