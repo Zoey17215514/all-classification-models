@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.svm import SVC # Import SVC
 from sklearn.inspection import permutation_importance # Import permutation_importance
-import json # Import json to load metrics
+# import json # No longer need json
 
 # Load the model
 try:
@@ -21,26 +21,16 @@ except FileNotFoundError:
     st.error("Error: 'all_classification_models.joblib' not found. Please ensure the models are saved.")
     loaded_models = None # Set to None to prevent errors if the file is not found
 
-# Load K-Fold Cross-Validation Results
-kfold_results = {}
+# Load K-Fold Cross-Validation Results from the single joblib file
+all_kfold_results = {}
 try:
-    # Load results for Decision Tree
-    with open('dt_kfold_results.json', 'r') as f:
-        kfold_results['Decision Tree'] = json.load(f)
-    # Add loading for other models' results here as they are saved
-    # Example:
-    # with open('rf_kfold_results.json', 'r') as f:
-    #     kfold_results['Random Forest'] = json.load(f)
-    # with open('svm_kfold_results.json', 'r') as f:
-    #     kfold_results['Support Vector Machine'] = json.load(f)
-
-    st.success("K-Fold results loaded successfully.")
+    kfold_results_filename = 'all_kfold_results.joblib'
+    all_kfold_results = load(kfold_results_filename)
+    st.success(f"K-Fold results loaded successfully from '{kfold_results_filename}'.")
 except FileNotFoundError:
-    st.warning("K-Fold results file(s) not found. Performance table will only show results from the single test split.")
-except json.JSONDecodeError:
-     st.error("Error decoding K-Fold results JSON file.")
+    st.warning(f"K-Fold results file '{kfold_results_filename}' not found. Performance table will only show results from the single test split if models were saved with that info.")
 except Exception as e:
-     st.error(f"An unexpected error occurred while loading K-Fold results: {e}")
+     st.error(f"An unexpected error occurred while loading K-Fold results from '{kfold_results_filename}': {e}")
 
 
 # Define the features to be used for prediction (ensure this matches what the models were trained on)
@@ -107,49 +97,56 @@ if df is not None:
                 recall_single = recall_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
                 f1_single = f1_score(y_test_eval, y_pred_eval, average='macro', zero_division=0)
 
-                # Get K-Fold results if loaded
-                if name in kfold_results:
-                     kfold_res = kfold_results[name]
-                     model_performance_data.append({
-                        'Model': name,
-                        'Accuracy (Test)': accuracy_single,
-                        'Precision (Test)': precision_single,
-                        'Recall (Test)': recall_single,
-                        'F1 Score (Test)': f1_single,
-                        'Accuracy (K-Fold Avg)': kfold_res.get('Avg Accuracy'),
-                        'Accuracy (K-Fold Std)': kfold_res.get('Std Accuracy'),
-                        'Precision (K-Fold Avg)': kfold_res.get('Avg Precision'),
-                        'Precision (K-Fold Std)': kfold_res.get('Std Precision'),
-                        'Recall (K-Fold Avg)': kfold_res.get('Avg Recall'),
-                        'Recall (K-Fold Std)': kfold_res.get('Std Recall'),
-                        'F1 Score (K-Fold Avg)': kfold_res.get('Avg F1 Score'),
-                        'F1 Score (K-Fold Std)': kfold_res.get('Std F1 Score')
-                     })
-                else:
-                    # If K-Fold results not loaded, just show single test split results
-                     model_performance_data.append({
-                        'Model': name,
-                        'Accuracy (Test)': accuracy_single,
-                        'Precision (Test)': precision_single,
-                        'Recall (Test)': recall_single,
-                        'F1 Score (Test)': f1_single
-                     })
+                # Prepare data row for the table
+                row_data = {
+                    'Model': name,
+                    'Accuracy (Test)': accuracy_single,
+                    'Precision (Test)': precision_single,
+                    'Recall (Test)': recall_single,
+                    'F1 Score (Test)': f1_single,
+                }
+
+                # Add K-Fold results if loaded for this model
+                if name in all_kfold_results:
+                    kfold_res = all_kfold_results[name]
+                    row_data['Accuracy (K-Fold Avg)'] = kfold_res.get('Avg Accuracy')
+                    row_data['Accuracy (K-Fold Std)'] = kfold_res.get('Std Accuracy')
+                    row_data['Precision (K-Fold Avg)'] = kfold_res.get('Avg Precision')
+                    row_data['Precision (K-Fold Std)'] = kfold_res.get('Std Precision')
+                    row_data['Recall (K-Fold Avg)'] = kfold_res.get('Avg Recall')
+                    row_data['Recall (K-Fold Std)'] = kfold_res.get('Std Recall')
+                    row_data['F1 Score (K-Fold Avg)'] = kfold_res.get('Avg F1 Score')
+                    row_data['F1 Score (K-Fold Std)'] = kfold_res.get('Std F1 Score')
+
+                model_performance_data.append(row_data)
 
             except Exception as e:
                 st.warning(f"Could not calculate performance metrics for {name}: {e}")
     model_performance_df = pd.DataFrame(model_performance_data)
 
-    # Format standard deviation columns
-    for col in model_performance_df.columns:
-        if 'Std' in col:
-            model_performance_df[col] = model_performance_df[col].apply(lambda x: f"&plusmn; {x:.4f}" if pd.notna(x) else "")
-            # Combine Avg and Std columns for display
-            avg_col = col.replace('Std', 'Avg')
-            original_metric = col.replace(' (K-Fold Std)', '')
-            if avg_col in model_performance_df.columns:
-                 model_performance_df[original_metric + ' (K-Fold)'] = model_performance_df[avg_col].round(4).astype(str) + model_performance_df[col]
-                 # Drop the separate Avg and Std columns after combining
-                 model_performance_df = model_performance_df.drop(columns=[avg_col, col])
+    # Format standard deviation columns and combine Avg/Std for display
+    if not model_performance_df.empty:
+        for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
+            avg_col = metric + ' (K-Fold Avg)'
+            std_col = metric + ' (K-Fold Std)'
+            combined_col_name = metric + ' (K-Fold)' # New column name
+
+            if avg_col in model_performance_df.columns and std_col in model_performance_df.columns:
+                # Combine Avg and Std, handling potential NaN values
+                model_performance_df[combined_col_name] = model_performance_df.apply(
+                    lambda row: f"{row[avg_col]:.4f} &plusmn; {row[std_col]:.4f}" if pd.notna(row[avg_col]) and pd.notna(row[std_col]) else "",
+                    axis=1
+                )
+                # Drop the separate Avg and Std columns after combining
+                model_performance_df = model_performance_df.drop(columns=[avg_col, std_col])
+            elif avg_col in model_performance_df.columns:
+                 # If only Avg is available
+                 model_performance_df[combined_col_name] = model_performance_df[avg_col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
+                 model_performance_df = model_performance_df.drop(columns=[avg_col])
+            elif std_col in model_performance_df.columns:
+                 # If only Std is available (unlikely but for completeness)
+                 model_performance_df[combined_col_name] = model_performance_df[std_col].apply(lambda x: f"&plusmn; {x:.4f}" if pd.notna(x) else "")
+                 model_performance_df = model_performance_df.drop(columns=[std_col])
 
 
 # Streamlit App Title
@@ -179,12 +176,12 @@ if loaded_models is not None and df is not None:
         final_cols = col_order + [col for col in model_performance_df.columns if col not in col_order]
 
         # Select and display columns, avoiding highlighting formatted strings
-        cols_to_highlight = [col for col in model_performance_df.columns if '(Test)' in col or ('(K-Fold)' in col and '&plusmn;' not in str(model_performance_df[col].iloc[0]))]
+        cols_to_highlight = [col for col in model_performance_df.columns if '(Test)' in col]
 
 
         st.dataframe(
             model_performance_df[final_cols].style.highlight_max(
-                subset=cols_to_highlight, # Highlight only the numerical columns
+                subset=cols_to_highlight, # Highlight only the numerical columns from Test set
                 axis=0,
                 color='lightgreen'
             ),
@@ -195,28 +192,34 @@ if loaded_models is not None and df is not None:
         # Accuracy Over Models Line Chart
         # The line chart is best suited for single-value comparisons, so we'll use the Test or Avg K-Fold if available
         chart_data = model_performance_df.copy()
-        # Use Avg K-Fold if available, otherwise use Test
+        # Use Avg K-Fold (numerical part) if available, otherwise use Test
         for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
-             avg_kfold_col = metric + ' (K-Fold)'
+             combined_kfold_col = metric + ' (K-Fold)'
              test_col = metric + ' (Test)'
-             if avg_kfold_col in chart_data.columns:
-                 # Need to extract numerical value from formatted string for chart
-                 chart_data[metric] = chart_data[avg_kfold_col].apply(lambda x: float(x.split('&plusmn;')[0].strip()) if isinstance(x, str) and '&plusmn;' in x else x)
-                 chart_data = chart_data.drop(columns=[avg_kfold_col])
+             if combined_kfold_col in chart_data.columns:
+                 # Extract numerical value from formatted string for chart
+                 chart_data[metric] = chart_data[combined_kfold_col].apply(lambda x: float(x.split('&plusmn;')[0].strip()) if isinstance(x, str) and '&plusmn;' in x else None) # Use None for missing/unformatted
+                 chart_data = chart_data.drop(columns=[combined_kfold_col])
              elif test_col in chart_data.columns:
                  chart_data[metric] = chart_data[test_col]
                  chart_data = chart_data.drop(columns=[test_col])
+             else:
+                 # If neither K-Fold nor Test is available, drop the metric column from chart_data
+                 chart_data = chart_data.drop(columns=[metric])
 
 
-        model_performance_melted_line = chart_data.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=['Accuracy', 'Precision', 'Recall', 'F1 Score'])
-        fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
-        sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
-        ax1.set_title('Model Performance Comparison (Line Plot)')
-        ax1.set_ylabel('Score')
-        ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
-        ax1.legend(title='Metric')
-        st.pyplot(fig1)
-        plt.close(fig1)
+        if not chart_data.empty and len([col for col in ['Accuracy', 'Precision', 'Recall', 'F1 Score'] if col in chart_data.columns]) > 0:
+             model_performance_melted_line = chart_data.melt(id_vars='Model', var_name='Metric', value_name='Score', value_vars=[col for col in ['Accuracy', 'Precision', 'Recall', 'F1 Score'] if col in chart_data.columns])
+             fig1, ax1 = plt.subplots(figsize=(8, 5)) # Smaller figure size
+             sns.lineplot(x='Model', y='Score', hue='Metric', data=model_performance_melted_line, marker='o', ax=ax1)
+             ax1.set_title('Model Performance Comparison (Line Plot)')
+             ax1.set_ylabel('Score')
+             ax1.set_ylim(0.8, 1.0) # Adjust y-axis limits as needed
+             ax1.legend(title='Metric')
+             st.pyplot(fig1)
+             plt.close(fig1)
+        else:
+             st.info("Not enough data available to generate the performance line chart.")
 
 
     # Model Selection using Radio Buttons
